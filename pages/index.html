@@ -4,14 +4,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>绿群日报</title>
-  <meta name="description" content="按日期浏览保研信息日报，默认显示最新一期，支持静态部署到 GitHub Pages。" />
-  <meta property="og:title" content="绿群日报 - CS Baoyan Chat Daily" />
-  <meta property="og:description" content="每日 AI 总结绿群信息，打破 CS 保研信息差。" />
+  <title>保研日报 · CS 保研信息日报</title>
+  <meta name="description" content="把 CS 保研群每日海量讨论，用 AI 提炼成一份可读的报纸。招生、夏令营、预推免、导师、面试经验、风险，每日一页。" />
+  <meta property="og:title" content="保研日报 · CS 保研信息日报" />
+  <meta property="og:description" content="每日 AI 总结 CS 保研信息，打破信息差。一份每天印出来的报纸。" />
   <meta property="og:type" content="website" />
-  <meta property="og:url" content="https://jielosc.github.io/csbaoyan-chat-daily/" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📰</text></svg>" />
-  <link rel="stylesheet" href="./styles.css?v=20260520b" />
+  <meta property="og:url" content="https://csbaoyan.cn" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22%23f4ede0%22/><text x=%2250%22 y=%2274%22 font-size=%2272%22 text-anchor=%22middle%22 font-family=%22serif%22 font-weight=%22900%22 fill=%22%23b8302a%22>保</text></svg>" />
+  <link rel="stylesheet" href="./styles.css?v=20260730d" />
   <script>
     const savedTheme = localStorage.getItem('theme') || 'system';
     if (savedTheme === 'dark' || (savedTheme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
@@ -22,201 +22,161 @@
   </script>
   <script defer src="./vendor/marked.min.js"></script>
   <script defer src="./vendor/purify.min.js"></script>
-  <script defer src="./app.js?v=20260319c"></script>
+  <script defer src="./app.js?v=20260730c"></script>
 </head>
 
 <body>
-  <div class="site-shell">
-    <header class="hero">
-      <a class="hero-copy hero-home-link" id="home-link" href="./" aria-label="回到主页">
-        <p class="eyebrow">CS Baoyan Chat Daily</p>
-        <h1>绿群日报</h1>
-        <p class="hero-summary">
-          绿群保研信息提炼：帮你每日快速跟进
-        </p>
+  <!-- 顶部实用栏 -->
+  <div class="utility-bar">
+    <div class="utility-bar-inner">
+      <a class="brand-mini" href="./" id="home-link" aria-label="回到主页">
+        保研日报<span class="brand-mini-sub">Living Press</span>
       </a>
-      <div class="hero-status">
-        <a href="https://github.com/jielosc/csbaoyan-chat-daily" target="_blank" rel="noopener noreferrer"
-          class="status-chip" aria-label="GitHub Repository">
-          <svg aria-hidden="true" height="16" viewBox="0 0 16 16" version="1.1" width="16" fill="currentColor">
-            <path
-              d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z">
-            </path>
-          </svg>
+      <div class="utility-tools">
+        <a href="https://github.com/cookiesheep/csbaoyan-ribao" target="_blank" rel="noopener noreferrer" class="chip" aria-label="GitHub 仓库">
+          <svg aria-hidden="true" height="15" viewBox="0 0 16 16" width="15" fill="currentColor"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"></path></svg>
           GitHub
         </a>
-        <a href="https://t.me/csbaoyan" target="_blank" rel="noopener noreferrer"
-          class="status-chip" aria-label="Telegram Channel">
-          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M21.57 4.11a1 1 0 0 0-1.05-.14L3.56 11.14a1 1 0 0 0 .09 1.88l4.66 1.68 1.67 5.08a1 1 0 0 0 1.79.24l2.6-3.49 4.29 3.18a1 1 0 0 0 1.57-.61l2.34-13.9a1 1 0 0 0-.4-1.09Zm-10.9 10.35-.73 3.26-.9-2.76 7.84-7.09-6.21 6.59Zm8.47 3.07-4.11-3.04a1 1 0 0 0-1.41.2l-.72.96.97-4.32 5.95-5.97-1.68 12.17Z"></path>
-          </svg>
-          Telegram
-        </a>
-        <span class="status-chip" id="report-count">0 篇日报</span>
-        <button class="status-chip" id="search-btn" aria-label="搜索日报" title="搜索">
-          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        <span class="chip" id="report-count"><span class="chip-num">0</span> 期</span>
+        <button class="chip is-icon" id="search-btn" aria-label="搜索日报" title="搜索 (Ctrl+K)">
+          <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
         </button>
-        <button class="status-chip" id="theme-toggle" aria-label="切换阅读模式" title="切换模式">
-          <svg class="icon-sun" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
-          <svg class="icon-moon" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
-          <svg class="icon-system" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+        <button class="chip is-icon" id="theme-toggle" aria-label="切换阅读模式" title="明暗主题">
+          <svg class="icon-sun" aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+          <svg class="icon-moon" aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+          <svg class="icon-system" aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
         </button>
       </div>
-    </header>
-
-    <div>
-      <main>
-        <section class="home-view" id="home-view" hidden>
-          <section class="pause-banner" aria-labelledby="pause-banner-title">
-            <div class="pause-banner-copy">
-              <p class="reader-label">Notice</p>
-              <h2 id="pause-banner-title">日报已暂时停止更新</h2>
-              <p>历史内容仍可按日期浏览和搜索。</p>
-            </div>
-            <div class="pause-banner-meta">
-              <a class="secondary-action" href="https://github.com/jielosc/csbaoyan-chat-daily/blob/main/docs/pause-update.md" target="_blank" rel="noopener noreferrer">查看详情</a>
-            </div>
-          </section>
-          <div class="home-hero">
-            <div class="home-copy">
-              <h2>把绿群中有用的保研信息，整理成每日可读的一页</h2>
-              <p>
-                绿群日报会从群聊中提取院校项目、夏令营、导师信息、经验观点和待核实风险，帮助没有时间翻完整聊天记录的同学快速跟进。
-              </p>
-            </div>
-            <div class="home-actions" role="group" aria-label="快捷入口">
-              <button class="primary-action" id="read-latest-btn" type="button">阅读最新日报</button>
-              <button class="secondary-action" id="home-search-btn" type="button">搜索全部日报</button>
-            </div>
-          </div>
-
-          <section class="home-grid" aria-label="站点概览">
-            <article class="home-panel latest-panel">
-              <p class="home-panel-kicker">Latest</p>
-              <h3>最新日报</h3>
-              <p class="home-panel-value" id="latest-report-date">正在加载...</p>
-              <p class="home-panel-note">查看最新一期群聊摘要，快速了解近期保研项目、导师信息、申请经验和待核实风险。</p>
-            </article>
-            <article class="home-panel">
-              <p class="home-panel-kicker">Archive</p>
-              <h3>日报归档</h3>
-              <p class="home-panel-value" id="home-report-count">0 篇</p>
-              <p class="home-panel-note">可按日期浏览，也可以用搜索定位具体院校、导师或项目关键词。</p>
-            </article>
-            <article class="home-panel">
-              <p class="home-panel-kicker">Verify</p>
-              <h3>谨慎核实</h3>
-              <p class="home-panel-value">AI 整理</p>
-              <p class="home-panel-note">
-                内容由 AI 从群聊中整理归纳，仅供参考。涉及时效性、主观经验和未核实信息时，请以官方通知为准。
-              </p>
-            </article>
-          </section>
-
-          <section class="recent-reports" aria-labelledby="recent-reports-title">
-            <div class="section-head">
-              <p class="reader-label">Recent Reports</p>
-              <h2 id="recent-reports-title">最近日报</h2>
-            </div>
-            <div class="recent-reports-list" id="recent-reports-list">
-              <div class="date-switcher-empty">正在加载最近日报...</div>
-            </div>
-          </section>
-
-          <section class="contribute-section" aria-labelledby="contribute-title">
-            <div class="contribute-copy">
-              <p class="reader-label">Contribute</p>
-              <h2 id="contribute-title">参与改进</h2>
-              <p>
-                绿群日报还在持续迭代。如果你发现内容有误、隐私风险、分类不准，或者希望增加新的浏览方式，欢迎在 GitHub 留下反馈。
-              </p>
-              <p>
-                如果它刚好帮你省下一点翻群聊的时间，也可以顺手点亮 Star，让更多同学发现这份日报。
-              </p>
-            </div>
-            <nav class="contribute-actions" aria-label="反馈与项目链接">
-              <a class="secondary-action" href="https://github.com/jielosc/csbaoyan-chat-daily/issues/new?title=%E5%86%85%E5%AE%B9%E9%97%AE%E9%A2%98%EF%BC%9A" target="_blank" rel="noopener noreferrer">反馈问题</a>
-              <a class="secondary-action" href="https://github.com/jielosc/csbaoyan-chat-daily/issues/new?title=%E6%94%B9%E8%BF%9B%E5%BB%BA%E8%AE%AE%EF%BC%9A" target="_blank" rel="noopener noreferrer">提出建议</a>
-              <a class="primary-action" href="https://github.com/jielosc/csbaoyan-chat-daily" target="_blank" rel="noopener noreferrer">查看项目</a>
-            </nav>
-          </section>
-        </section>
-
-        <section class="reader-view" id="reader-view" hidden>
-        <section class="reader-intro">
-          <section class="date-switcher" id="date-switcher" aria-label="日期切换">
-            <div class="date-switcher-bar">
-              <button class="date-nav-btn" id="prev-date-btn" type="button" aria-label="上一条日报" title="上一条日报">
-                <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="15 18 9 12 15 6"></polyline>
-                </svg>
-              </button>
-              <button class="date-current-btn" id="current-date-btn" type="button" aria-controls="date-switcher-popover"
-                aria-expanded="false" aria-label="当前日报日期，打开日期列表">
-                <span class="date-current-value" id="date-switcher-current">正在加载...</span>
-                <svg class="date-current-caret" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="6 9 12 15 18 9"></polyline>
-                </svg>
-              </button>
-              <button class="date-nav-btn" id="next-date-btn" type="button" aria-label="下一条日报" title="下一条日报">
-                <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="9 18 15 12 9 6"></polyline>
-                </svg>
-              </button>
-            </div>
-            <div class="date-switcher-popover" id="date-switcher-popover" hidden>
-              <div class="date-switcher-popover-head">
-                <p class="date-switcher-kicker">Archive</p>
-                <p class="date-switcher-title">选择日报日期</p>
-              </div>
-              <div class="date-switcher-list" id="date-switcher-list">
-                <div class="date-switcher-empty">正在加载日期列表...</div>
-              </div>
-            </div>
-          </section>
-        </section>
-
-        <section class="report-card" aria-live="polite">
-          <div class="loading-state" id="loading-state">
-            <div class="loading-line wide"></div>
-            <div class="loading-line"></div>
-            <div class="loading-line narrow"></div>
-          </div>
-          <article class="report-content" id="report-content"></article>
-        </section>
-        </section>
-      </main>
     </div>
-
-    <footer class="site-footer">
-      <div class="footer-links">
-        <span>绿群日报是 <a href="https://github.com/CS-BAOYAN" target="_blank" rel="noopener noreferrer">CS-BAOYAN
-            社区</a>相关群聊信息的非官方整理项目</span>
-      </div>
-      <p class="disclaimer-note">
-        内容由 AI 辅助归纳，仅供参考；涉及时效性、主观经验和未核实信息时，请以官方通知和公开资料为准。
-      </p>
-    </footer>
   </div>
 
+  <div class="site-shell">
+
+    <!-- ============ 主页 · 头版 ============ -->
+    <main>
+      <section class="home-view" id="home-view" hidden>
+        <header class="frontpage-mast">
+          <p class="frontpage-eyebrow">CS Baoyan · Daily Press · 自 2026</p>
+          <h1 class="frontpage-title">保研日报<span class="vert">活字印刷</span></h1>
+          <p class="frontpage-sub">A Daily Press of CS Graduate Admission</p>
+          <div class="double-rule"></div>
+        </header>
+
+        <p class="frontpage-stand">
+          每天清晨，把一个 CS 保研群里<em>海量杂乱的讨论</em>，提炼、排版、印成一份可读的报纸——
+          招生动态、夏令营与预推免、导师信息、面试经验，以及那些<em>需要警惕的风险</em>，一页读完。
+        </p>
+
+        <div class="frontpage-actions">
+          <button class="btn btn-primary" id="read-latest-btn" type="button">阅读最新一期 →</button>
+          <button class="btn btn-ghost" id="home-search-btn" type="button">检索全部日报</button>
+        </div>
+
+        <section class="front-stats" aria-label="站点概览">
+          <article class="front-stat">
+            <p class="front-stat-kicker">Latest</p>
+            <p class="front-stat-value" id="latest-report-date">载入中</p>
+            <p class="front-stat-note">最新一期群聊摘要，速览近期保研项目与导师信息。</p>
+          </article>
+          <article class="front-stat">
+            <p class="front-stat-kicker">Archive</p>
+            <p class="front-stat-value" id="home-report-count">0 期</p>
+            <p class="front-stat-note">按日期翻阅，或用检索定位具体院校、导师与项目。</p>
+          </article>
+          <article class="front-stat">
+            <p class="front-stat-kicker">Verify</p>
+            <p class="front-stat-value">AI 排版</p>
+            <p class="front-stat-note">内容由 AI 归纳，仅供参考；时效与未核实信息请以官方为准。</p>
+          </article>
+        </section>
+
+        <section class="section-head">
+          <p class="reader-label">Recent Editions</p>
+          <h2>最近日报</h2>
+        </section>
+        <div class="archive-list" id="recent-reports-list">
+          <div class="archive-empty">正在加载最近日报…</div>
+        </div>
+      </section>
+
+      <!-- ============ 阅读视图 · 报纸 ============ -->
+      <section class="reader-view" id="reader-view" hidden>
+        <nav class="datebar" id="date-switcher" aria-label="日期翻阅">
+          <button class="date-nav-btn" id="prev-date-btn" type="button" aria-label="上一期" title="上一期 (←)">
+            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          </button>
+          <button class="date-current" id="current-date-btn" type="button" aria-controls="date-switcher-popover" aria-expanded="false">
+            <span class="dc-issue" id="dc-issue">ISSUE</span>
+            <span class="dc-date" id="date-switcher-current">载入中</span>
+          </button>
+          <button class="date-nav-btn" id="next-date-btn" type="button" aria-label="下一期" title="下一期 (→)">
+            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </button>
+          <div class="date-popover" id="date-switcher-popover" hidden>
+            <div class="date-popover-head">
+              <p class="reader-label">Archive</p>
+              <p class="date-popover-title">选择一期日报</p>
+            </div>
+            <div class="date-list" id="date-switcher-list"></div>
+          </div>
+        </nav>
+
+        <div class="view-toggle" id="view-toggle" role="group" aria-label="版面切换">
+          <button type="button" data-mode="full" class="active">全文</button>
+          <button type="button" data-mode="front">头版</button>
+        </div>
+
+        <div class="reader-canvas">
+          <aside class="toc" id="toc" hidden aria-label="本期目录">
+            <div class="toc-label">本期目录</div>
+            <div class="toc-list" id="toc-list"></div>
+          </aside>
+          <div class="report-card">
+            <div class="loading-state" id="loading-state">
+              <div class="loading-line wide"></div>
+              <div class="loading-line"></div>
+              <div class="loading-line narrow"></div>
+            </div>
+            <article class="report-content" id="report-content" aria-live="polite"></article>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <footer class="site-footer">
+    <p class="footer-links">
+      保研日报是 <a href="https://github.com/CS-BAOYAN" target="_blank" rel="noopener noreferrer">CS-BAOYAN 社区</a>
+      相关群聊信息的非官方整理项目 ·
+      <a href="https://github.com/cookiesheep/csbaoyan-ribao" target="_blank" rel="noopener noreferrer">源代码</a>
+    </p>
+    <p class="disclaimer-note">
+      内容由 AI 辅助归纳并排成报纸版面，仅供参考；涉及时效性、主观经验与未核实信息时，请以官方通知与公开资料为准。
+    </p>
+  </footer>
+
+  <!-- ============ 搜索 · 资料室检索卡 ============ -->
   <div class="search-modal" id="search-modal" aria-hidden="true" hidden>
     <div class="search-backdrop" id="search-backdrop"></div>
-    <div class="search-container">
-      <div class="search-header">
+    <div class="search-card">
+      <div class="search-head">
         <svg class="search-icon" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-        <input type="text" id="search-input" class="search-input" placeholder="搜索所有日报内容..." autocomplete="off">
-        <button class="close-search-btn" id="close-search-btn" aria-label="关闭搜索">
-          <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        <input type="text" id="search-input" class="search-input" placeholder="检索资料室：输入院校、导师、项目…" autocomplete="off">
+        <button class="close-search-btn" id="close-search-btn" aria-label="关闭检索">
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
       </div>
+      <div class="search-meta" id="search-meta">资料室 · 共 0 卷</div>
       <div class="search-results" id="search-results">
-        <div class="search-placeholder">输入关键词开始搜索...</div>
+        <div class="search-placeholder">输入关键词，开始在全部日报中检索…</div>
       </div>
     </div>
   </div>
+
+  <!-- 印刷墨辊 -->
+  <div class="press-ink-roller" id="ink-roller" aria-hidden="true"></div>
+  <!-- 剪报 toast -->
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </body>
 
 </html>

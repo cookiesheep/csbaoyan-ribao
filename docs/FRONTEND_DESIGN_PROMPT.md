@@ -161,3 +161,36 @@
 3. 最后**交互**（头版/全文切换、目录、剪报）与**响应式/降级/外链清理**。
 
 > 完成后输出改动的 `pages/` 文件即可。开发中如某条动效实际效果不佳，可在保持「报纸排版 + 印刷物理」总基调下自行调整参数——设计允许迭代。
+
+---
+
+## 9. 部署拓扑与开发/上线流程（必读，避免改错地方！）
+
+本项目有 **4 个代码/内容位置**，各司其职，**切勿混淆**：
+
+| 位置 | 角色 | 前端开发要不要动 |
+|---|---|---|
+| **GitHub** `cookiesheep/csbaoyan-ribao` | **唯一源代码源（source of truth）** | ✅ 在这里开发：clone → 改 `pages/` → commit → push |
+| **笔记本**（任一本地 checkout） | 开发用本地副本 | ✅ 作为开发工作区 |
+| **台式机** `D:\code\csbaoyan` | **数据生成端**：跑 qq_dump_db + ingest + DeepSeek 出报 + 上传 `.md`。前端文件在此只是旧快照 | ❌ **不要在这里改前端** |
+| **服务器** byocc `/var/www/csbaoyan` | **网站托管端**：`python -m http.server :3002`，经 Cloudflare → csbaoyan.cn | 部署目标（见下，勿自行改） |
+
+### 关键澄清（最重要）
+- **网站前端由服务器托管，不是台式机。** 台式机每天只生成日报 `.md` 数据并 scp 上传到服务器；前端 HTML/CSS/JS 与报告数据是**两件分开的事**。
+- 你的任务**只做前端代码**（`pages/` 下的 `index.html`/`styles.css`/`app.js`/`vendor/`），**不要碰数据生成、不要碰台式机、不要碰服务器**。
+
+### 开发流程
+1. `git clone https://github.com/cookiesheep/csbaoyan-ribao.git`（克隆到干净新目录，如 `csbaoyan-ribao-fe`）
+2. 在克隆里改 `pages/`；在 `pages/` 目录下 `python -m http.server 8080` 本地预览，用仓库自带的 `pages/data/`（数十篇真实样本）测试
+3. 自测通过 → commit + push 到 GitHub
+
+### 上线部署（不是你的任务，仅供了解）
+前端推到 GitHub 后，**上线到 csbaoyan.cn 是单独一步**（由项目维护者审核后执行，你不用做）：
+```bash
+# 把前端文件（不含 data）同步到服务器（端口 6543）
+scp -P 6543 pages/index.html pages/styles.css pages/app.js -r pages/vendor root@122.9.99.104:/var/www/csbaoyan/
+# 服务器 http.server 实时读文件，刷新即生效；报告数据(.md)不受影响
+```
+
+### 你的交付物
+**改好的 `pages/` 代码，commit 并 push 到 GitHub**，且本地 `python -m http.server` 预览满足第 7 节验收标准。**不要直接部署到线上服务器。**

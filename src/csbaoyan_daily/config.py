@@ -17,6 +17,12 @@ if load_dotenv is not None:
 EXPORT_DIR = Path(os.getenv("CSBAOYAN_EXPORT_DIR", "chat_exports"))
 PAGES_DIR = Path(os.getenv("CSBAOYAN_PAGES_DIR", "pages"))
 
+# NTQQ 本地数据库直读（路线 B：不封号的数据源）
+NTQQ_DB_PATH = Path(os.getenv("CSBAOYAN_NTQQ_DB_PATH") or "")
+GROUP_CODE = os.getenv("CSBAOYAN_GROUP_CODE")
+NTQQ_QQ = os.getenv("CSBAOYAN_NTQQ_QQ")  # 仅用于 qq_dump_db 解密步骤的 --qq 参数
+DUMP_DB_DIR = Path(os.getenv("CSBAOYAN_DUMP_DB_DIR") or "")  # qq_dump_db 输出的明文库目录
+
 # Model provider config
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")

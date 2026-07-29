@@ -1,2 +1,4 @@
 openai>=1.30.0
 python-dotenv>=1.0.0
+# 路线 B：本地 NTQQ 数据库直读所需的 protobuf 解析
+blackboxprotobuf>=1.0.0

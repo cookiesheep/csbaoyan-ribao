@@ -7,10 +7,11 @@ from pathlib import Path
 
 from .app.broadcast import broadcast_report
 from .app.generate import GenerateOptions, run_generate_report
+from .app.ingest import IngestOptions, run_ingest
 from .app.pipeline import PipelineOptions, run_pipeline
 from .app.publish import PublishOptions, run_publish
 from .app.verify import format_release_issues, run_release_check
-from .config import EXPORT_DIR, OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL, PAGES_DIR
+from .config import EXPORT_DIR, GROUP_CODE, NTQQ_DB_PATH, OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL, PAGES_DIR
 from .domain.file_utils import validate_report_date
 
 
@@ -39,6 +40,18 @@ def add_generate_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--api-key", default=OPENAI_API_KEY, help="Optional API key for the OpenAI-compatible API.")
 
 
+def add_ingest_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--db-path", type=Path, default=NTQQ_DB_PATH, help="已解密的 NTQQ 明文 SQLite 数据库路径（qq_dump_db 输出）。")
+    parser.add_argument("--export-dir", type=Path, default=EXPORT_DIR, help="导出 QCE JSON 的输出目录（与 generate 的 --export-dir 一致）。")
+    parser.add_argument("--date", "--report-date", dest="date", type=validate_report_date, help="目标日期 YYYY-MM-DD，默认昨天。")
+    parser.add_argument("--group", default=GROUP_CODE, help="目标群过滤值（群号/群名片段，按库实际列校准）。")
+    parser.add_argument("--table", help="消息表名（留空自动发现；用 --inspect 校准）。")
+    parser.add_argument("--blob-column", help="存 protobuf blob 的列名（留空自动发现）。")
+    parser.add_argument("--time-column", help="存时间戳的列名（用于库内日期过滤）。")
+    parser.add_argument("--group-column", help="存群标识的列名（用于库内群过滤）。")
+    parser.add_argument("--inspect", action="store_true", help="体检模式：只打印库结构 + 样本消息解码，不导出。用于一次性字段校准。")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="CS Baoyan chat daily report tools.")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -57,6 +70,9 @@ def build_parser() -> argparse.ArgumentParser:
     publish_parser = subparsers.add_parser("publish", help="Commit and optionally push pages/data changes.")
     publish_parser.add_argument("--repo-root", type=Path, default=Path.cwd(), help="Repository root path.")
     publish_parser.add_argument("--skip-push", action="store_true", help="Commit locally without pushing.")
+
+    ingest_parser = subparsers.add_parser("ingest", help="从本地 NTQQ 明文数据库导出 QCE JSON（路线 B，不封号）。")
+    add_ingest_arguments(ingest_parser)
 
     pipeline_parser = subparsers.add_parser("pipeline", help="Run generate, verify and publish in order.")
     pipeline_parser.add_argument("--repo-root", type=Path, default=Path.cwd(), help="Repository root path.")
@@ -111,6 +127,22 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.command == "publish":
             run_publish(PublishOptions(repo_root=args.repo_root, push=not args.skip_push))
+            return 0
+
+        if args.command == "ingest":
+            run_ingest(
+                IngestOptions(
+                    db_path=args.db_path,
+                    export_dir=args.export_dir,
+                    date=args.date,
+                    group=args.group,
+                    table=args.table,
+                    blob_column=args.blob_column,
+                    time_column=args.time_column,
+                    group_column=args.group_column,
+                    inspect=args.inspect,
+                )
+            )
             return 0
 
         if args.command == "pipeline":

@@ -17,3 +17,10 @@ logs/
 *.log
 Thumbs.db
 .DS_Store
+
+# oh-my-claudecode 编排状态（本地）
+.omc/
+
+# 解密后的 NTQQ 数据库（含明文聊天，绝不提交）
+*.db
+output/

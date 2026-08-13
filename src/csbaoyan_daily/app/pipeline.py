@@ -34,6 +34,7 @@ class PipelineOptions:
     skip_commit: bool = False
     skip_push: bool = False
     skip_telegram: bool = False
+    xhs_export: bool = False
 
 
 def _resolved_report_date(report_date: str | None) -> str:
@@ -43,6 +44,7 @@ def _resolved_report_date(report_date: str | None) -> str:
 def run_pipeline(options: PipelineOptions) -> str:
     repo_root = options.repo_root.resolve()
     report_date = _resolved_report_date(options.date)
+    artifacts = None
 
     if not options.skip_commit and not options.skip_push:
         logging.info("Checking Git remote and upstream before generation")
@@ -69,6 +71,26 @@ def run_pipeline(options: PipelineOptions) -> str:
             )
         )
         report_date = artifacts.report_date
+
+    if options.xhs_export:
+        if artifacts is None:
+            logging.info("跳过小红书导出：本次 pipeline 未生成日报产物。")
+        else:
+            try:
+                from .xhs_export import XhsExportOptions, run_xhs_export
+
+                xhs_path = run_xhs_export(
+                    XhsExportOptions(
+                        artifacts=artifacts,
+                        pages_dir=options.pages_dir,
+                        repo_root=repo_root,
+                        enabled=True,
+                    )
+                )
+                if xhs_path:
+                    logging.info("小红书导出 JSON：%s", xhs_path)
+            except Exception as exc:
+                logging.warning("小红书导出失败，不影响每日日报：%s", exc)
 
     if not options.skip_release_check:
         logging.info("Running release check")

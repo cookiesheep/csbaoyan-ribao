@@ -16,6 +16,7 @@ if load_dotenv is not None:
 # Local paths
 EXPORT_DIR = Path(os.getenv("CSBAOYAN_EXPORT_DIR", "chat_exports"))
 PAGES_DIR = Path(os.getenv("CSBAOYAN_PAGES_DIR", "pages"))
+XHS_EXPORT = os.getenv("CSBAOYAN_XHS_EXPORT", "").strip().lower() in {"1", "true", "yes", "on"}
 
 # NTQQ 本地数据库直读（路线 B：不封号的数据源）
 NTQQ_DB_PATH = Path(os.getenv("CSBAOYAN_NTQQ_DB_PATH") or "")

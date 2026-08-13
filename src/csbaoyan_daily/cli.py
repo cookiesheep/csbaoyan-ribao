@@ -11,7 +11,16 @@ from .app.ingest import IngestOptions, run_ingest
 from .app.pipeline import PipelineOptions, run_pipeline
 from .app.publish import PublishOptions, run_publish
 from .app.verify import format_release_issues, run_release_check
-from .config import EXPORT_DIR, GROUP_CODE, NTQQ_DB_PATH, OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL, PAGES_DIR
+from .config import (
+    EXPORT_DIR,
+    GROUP_CODE,
+    NTQQ_DB_PATH,
+    OPENAI_API_KEY,
+    OPENAI_BASE_URL,
+    OPENAI_MODEL,
+    PAGES_DIR,
+    XHS_EXPORT,
+)
 from .domain.file_utils import validate_report_date
 
 
@@ -82,6 +91,11 @@ def build_parser() -> argparse.ArgumentParser:
     pipeline_parser.add_argument("--skip-commit", action="store_true", help="Skip all git operations and Telegram broadcast.")
     pipeline_parser.add_argument("--skip-push", action="store_true", help="Commit locally without pushing or broadcasting.")
     pipeline_parser.add_argument("--skip-telegram", action="store_true", help="Skip Telegram broadcast after a successful push.")
+    pipeline_parser.add_argument(
+        "--xhs-export",
+        action="store_true",
+        help="Generate a structured Xiaohongshu source JSON after report generation.",
+    )
 
     return parser
 
@@ -168,6 +182,7 @@ def main(argv: list[str] | None = None) -> int:
                     skip_commit=args.skip_commit,
                     skip_push=args.skip_push,
                     skip_telegram=args.skip_telegram,
+                    xhs_export=args.xhs_export or XHS_EXPORT,
                 )
             )
             return 0

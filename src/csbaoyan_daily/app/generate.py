@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..config import EXPORT_DIR, OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL, PAGES_DIR, resolve_path
-from ..domain.chat_processing import anonymize_messages, chunk_messages, write_anonymized_transcript
+from ..domain.chat_processing import anonymize_messages, chunk_messages, filter_noise_messages, write_anonymized_transcript
 from ..domain.file_utils import (
     extract_messages,
     get_json_file_by_date,
@@ -16,7 +16,7 @@ from ..domain.file_utils import (
     validate_report_date,
     write_reports_manifest,
 )
-from ..domain.report_generation import extract_all_chunks, generate_final_report
+from ..domain.report_generation import extract_all_chunks, extract_all_chunks_structured, generate_final_report
 from ..infra.openai_client import create_openai_client
 
 
@@ -36,6 +36,8 @@ class GenerateOptions:
     max_workers: int = 4
     base_url: str | None = OPENAI_BASE_URL
     api_key: str | None = OPENAI_API_KEY
+    noise_filter: bool = True
+    structured_extraction: bool = False
 
 
 @dataclass(frozen=True)
@@ -63,6 +65,20 @@ def run_generate_report(options: GenerateOptions) -> GenerateArtifacts:
     payload = load_chat_export(export_file)
     messages = extract_messages(payload)
     anonymized_messages = anonymize_messages(messages)
+    if options.noise_filter:
+        filtered_messages, noise_stats = filter_noise_messages(anonymized_messages)
+        logging.info(
+            "规则噪声过滤：%s → %s 条（丢弃：纯emoji %s / 噪声词 %s / 刷屏 %s）",
+            noise_stats.input_count,
+            noise_stats.output_count,
+            noise_stats.dropped_emoji_only,
+            noise_stats.dropped_noise_token,
+            noise_stats.dropped_flood,
+        )
+        if filtered_messages:
+            anonymized_messages = filtered_messages
+        else:
+            logging.warning("规则过滤后剩余 0 条消息，回退到过滤前列表以避免空报告。")
     chunks = chunk_messages(
         anonymized_messages,
         max_chars=options.chunk_max_chars,
@@ -84,15 +100,26 @@ def run_generate_report(options: GenerateOptions) -> GenerateArtifacts:
     logging.info("脱敏后消息数：%s，Chunk 数：%s", len(anonymized_messages), len(chunks))
     logging.info("LLM 超时设置：分块提取 %ss，最终汇总 %ss", options.timeout, options.final_timeout)
 
-    extract_all_chunks(
-        chunks=chunks,
-        extracted_path=extracted_path,
-        client=extraction_client,
-        model=options.model or OPENAI_MODEL,
-        retries=options.retries,
-        temperature=options.temperature,
-        max_workers=options.max_workers,
-    )
+    if options.structured_extraction:
+        extract_all_chunks_structured(
+            chunks=chunks,
+            extracted_path=extracted_path,
+            client=extraction_client,
+            model=options.model or OPENAI_MODEL,
+            retries=options.retries,
+            temperature=options.temperature,
+            max_workers=options.max_workers,
+        )
+    else:
+        extract_all_chunks(
+            chunks=chunks,
+            extracted_path=extracted_path,
+            client=extraction_client,
+            model=options.model or OPENAI_MODEL,
+            retries=options.retries,
+            temperature=options.temperature,
+            max_workers=options.max_workers,
+        )
 
     generate_final_report(
         extracted_path=extracted_path,

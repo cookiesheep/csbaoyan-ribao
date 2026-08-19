@@ -35,6 +35,8 @@ class PipelineOptions:
     skip_push: bool = False
     skip_telegram: bool = False
     xhs_export: bool = False
+    noise_filter: bool = True
+    structured_extraction: bool = False
 
 
 def _resolved_report_date(report_date: str | None) -> str:
@@ -68,6 +70,8 @@ def run_pipeline(options: PipelineOptions) -> str:
                 max_workers=options.max_workers,
                 base_url=options.base_url,
                 api_key=options.api_key,
+                noise_filter=options.noise_filter,
+                structured_extraction=options.structured_extraction,
             )
         )
         report_date = artifacts.report_date

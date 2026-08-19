@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import re
 import time
@@ -10,7 +11,7 @@ from typing import Any
 from .chat_processing import ChatChunk
 
 
-EXTRACTION_SYSTEM_PROMPT = """你是一名熟悉“保研/夏令营/预推免/联系导师/实验室招生”语境的信息编辑。
+EXTRACTION_SYSTEM_PROMPT = """你是一名熟悉"保研/夏令营/预推免/联系导师/实验室招生"语境的信息编辑。
 
 你的任务是从一段群聊中提取真正有价值的信息，并忽略灌水、纯表情、无意义接龙和重复内容。
 
@@ -22,22 +23,38 @@ EXTRACTION_SYSTEM_PROMPT = """你是一名熟悉“保研/夏令营/预推免/�
 
 输出要求：
 1. 使用 Markdown。
-2. 先给“信息要点”，再给“有趣讨论（如有）”。
+2. 先给"信息要点"，再给"有趣讨论（如有）"。
 3. 每条尽量简洁，避免复述原文。
 4. 不要输出邮箱、手机号、QQ、微信、个人主页、具体链接等联系方式。
 5. 对明显带有主观色彩的负面评价，尽量改写为中性、克制的风险提示。
-6. 对无法核实的传闻显式标注“待核实”。"""
+6. 对无法核实的传闻显式标注"待核实"。"""
 
-FINAL_REPORT_SYSTEM_PROMPT = """你是一名“保研信息日报”编辑，负责把多段提取结果整理成一篇清晰、克制、可读的日报。
+FINAL_REPORT_SYSTEM_PROMPT = """你是一名"保研信息日报"编辑，负责把多段提取结果整理成一篇清晰、克制、可读的日报。
 
 请根据用户提供的输出模板和分块提取内容生成最终日报，要求：
 1. 优先保留对保研相关决策有帮助的信息。
 2. 合并重复信息，去掉噪声和相互矛盾但无定论的表述。
-3. 对明显不确定的内容加上“待核实”等提示。
+3. 对明显不确定的内容加上"待核实"等提示。
 4. 全文使用 Markdown，语言简洁自然，不要暴露匿名化前的隐私信息。
 5. 不要输出邮箱、手机号、QQ、微信、具体网页链接或其他联系方式。
-6. 对导师、实验室、学校的评价保持中性，不要使用“避雷”“坑”“黑奴”等强烈标签；如必须表达风险，用“存在争议”“需自行核实”“有较强负面反馈”等克制说法。
-7. “今日概览”用一段话简洁概括，不要分点列出。"""
+6. 对导师、实验室、学校的评价保持中性，不要使用"避雷""坑""黑奴"等强烈标签；如必须表达风险，用"存在争议""需自行核实""有较强负面反馈"等克制说法。
+7. "今日概览"用一段话简洁概括，不要分点列出。"""
+
+STRUCTURED_EXTRACTION_PROMPT = """你是一名熟悉"保研/夏令营/预推免/联系导师/实验室招生"语境的信息编辑。
+
+从一段群聊中提取真正有价值的信息，忽略灌水、纯表情、无意义接龙和重复内容。
+只输出一个 JSON 对象，不要输出任何额外文字、解释或 Markdown 代码块。
+
+格式：
+{"items": [{"category": "招生信息|夏令营|预推免|导师讨论|经验建议|风险提示|有趣讨论", "summary": "简洁中性的要点", "quote": "支撑该要点的原话或近似原话", "speaker": "发言者别名（照抄聊天中的 User_N）", "time": "HH:MM", "confidence": "高|中|低"}]}
+
+规则：
+1. 每条要点必须有对应 quote，且 quote 必须来自本段聊天原文，不得编造。
+2. summary 中性克制；负面评价用"存在争议/需自行核实"，不得使用"避雷/坑/黑奴"等强烈标签。
+3. 无法核实的传闻，confidence 标"低"并在 summary 注明"待核实"。
+4. 不要输出任何联系方式（邮箱/手机号/QQ/微信/链接）。
+5. speaker 与 time 必须来自本段聊天的真实发言者与时间。
+6. 本段无可提取信息时，输出 {"items": []}。"""
 
 RISKY_TERM_REPLACEMENTS = {
     "避雷": "需谨慎核实",
@@ -159,6 +176,158 @@ def extract_all_chunks(
         ),
         encoding="utf-8",
     )
+
+
+def parse_structured_payload(content: str) -> list[dict[str, str]]:
+    """从 LLM 返回中提取 items 数组，兼容代码块包裹与前后多余文字。"""
+    text = content.strip()
+    fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+    if fenced:
+        text = fenced.group(1)
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        text = text[start : end + 1]
+    data = json.loads(text)
+    items = data.get("items") if isinstance(data, dict) else None
+    if not isinstance(items, list):
+        raise ValueError("结构化输出缺少 items 数组。")
+    return items
+
+
+def _cooled_temperature(base: float, attempt: int) -> float:
+    """温度降温策略：第 1 次用 base，第 2 次减半，第 3 次及以后归零。"""
+    if attempt <= 1:
+        return base
+    if attempt == 2:
+        return round(base * 0.5, 3)
+    return 0.0
+
+
+def call_llm_structured(
+    client: Any,
+    model: str,
+    system_prompt: str,
+    user_prompt: str,
+    retries: int,
+    temperature: float,
+) -> list[dict[str, str]]:
+    last_error: Exception | None = None
+    for attempt in range(1, retries + 1):
+        current_temperature = _cooled_temperature(temperature, attempt)
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                temperature=current_temperature,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+            )
+            content = response.choices[0].message.content.strip()
+            return parse_structured_payload(content)
+        except Exception as exc:
+            last_error = exc
+            logging.warning(
+                "结构化 LLM 调用失败，第 %s/%s 次（温度 %.2f）：%s",
+                attempt,
+                retries,
+                current_temperature,
+                exc,
+            )
+            if attempt < retries:
+                time.sleep(min(2 ** attempt, 8))
+
+    raise RuntimeError(f"结构化 LLM 调用最终失败：{last_error}") from last_error
+
+
+def summarize_chunk_structured(
+    chunk: ChatChunk,
+    client: Any,
+    model: str,
+    retries: int,
+    temperature: float,
+) -> tuple[int, str, str, list[dict[str, str]]]:
+    logging.info("处理 Chunk %s（结构化），%s -> %s", chunk.index, chunk.start_time, chunk.end_time)
+    user_prompt = (
+        f"以下是一个 QQ 保研群聊 Chunk，请按要求的 JSON 格式提取。\n\n"
+        f"Chunk 编号：{chunk.index}\n"
+        f"时间范围：{chunk.start_time} - {chunk.end_time}\n\n"
+        f"聊天内容：\n{chunk.text}"
+    )
+    items = call_llm_structured(
+        client=client,
+        model=model,
+        system_prompt=STRUCTURED_EXTRACTION_PROMPT,
+        user_prompt=user_prompt,
+        retries=retries,
+        temperature=temperature,
+    )
+    return chunk.index, chunk.start_time, chunk.end_time, items
+
+
+def _render_structured_items(start_time: str, end_time: str, items: list[dict[str, str]]) -> str:
+    lines = [f"- 时间范围：{start_time} - {end_time}"]
+    if not items:
+        lines.append("- （本段无可提取信息）")
+        return "\n".join(lines) + "\n"
+    for item in items:
+        category = str(item.get("category") or "其他")
+        confidence = str(item.get("confidence") or "").strip()
+        summary = str(item.get("summary") or "").strip()
+        quote = str(item.get("quote") or "").strip()
+        speaker = str(item.get("speaker") or "").strip()
+        timestamp = str(item.get("time") or "").strip()
+        tag = f"[{category}|{confidence}]" if confidence else f"[{category}]"
+        attribution = f"——「{quote}」（{speaker} @ {timestamp}）" if quote else ""
+        lines.append(f"- {tag} {summary} {attribution}".rstrip())
+    return "\n".join(lines) + "\n"
+
+
+def extract_all_chunks_structured(
+    chunks: list[ChatChunk],
+    extracted_path: Path,
+    client: Any,
+    model: str,
+    retries: int,
+    temperature: float,
+    max_workers: int,
+) -> None:
+    results: list[tuple[int, str, str, list[dict[str, str]]]] = []
+
+    if max_workers <= 1 or len(chunks) <= 1:
+        for chunk in chunks:
+            results.append(
+                summarize_chunk_structured(
+                    chunk=chunk,
+                    client=client,
+                    model=model,
+                    retries=retries,
+                    temperature=temperature,
+                )
+            )
+    else:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(
+                    summarize_chunk_structured,
+                    chunk,
+                    client,
+                    model,
+                    retries,
+                    temperature,
+                ): chunk.index
+                for chunk in chunks
+            }
+            for future in as_completed(futures):
+                results.append(future.result())
+
+    results.sort(key=lambda item: item[0])
+    parts = [
+        f"# Chunk {chunk_index}\n\n{_render_structured_items(start_time, end_time, items)}\n"
+        for chunk_index, start_time, end_time, items in results
+    ]
+    extracted_path.write_text("".join(parts), encoding="utf-8")
 
 
 def generate_final_report(

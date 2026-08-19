@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,38 @@ URL_PATTERN = re.compile(
 PHONE_PATTERN = re.compile(r"(?<!\d)(?:\+?86[- ]?)?1[3-9]\d{9}(?!\d)")
 CONTACT_ID_PATTERN = re.compile(r"(?i)\b(?:qq|vx|wechat|weixin|微信)[:： ]*[A-Za-z0-9_-]{5,}\b")
 PUBLIC_ALIAS_RULES = ()
+
+
+# ---- Stage 1a: 规则噪声预过滤（借鉴 SXP-Simon 清洗 + teledigest NFKC/unicode 过滤）----
+# Emoji 与零宽/格式控制符：用于从保留文本中剥离，并识别纯表情消息。
+_EMOJI_RANGES: tuple[tuple[int, int], ...] = (
+    (0x1F300, 0x1F5FF),  # 杂项符号与象形文字
+    (0x1F600, 0x1F64F),  # 表情
+    (0x1F680, 0x1F6FF),  # 交通与地图
+    (0x1F700, 0x1F77F),
+    (0x1F780, 0x1F7FF),
+    (0x1F800, 0x1F8FF),
+    (0x1F900, 0x1F9FF),  # 补充符号
+    (0x1FA00, 0x1FA6F),
+    (0x1FA70, 0x1FAFF),
+    (0x2600, 0x26FF),    # 杂项符号
+    (0x2700, 0x27BF),    # 装饰符号（Dingbats）
+    (0x2300, 0x23FF),    # 杂项技术符号（含 ⌚⌛）
+    (0xFE0E, 0xFE0F),    # 变体选择符
+    (0x200B, 0x200D),    # 零宽空格 / 非连接符 / 连接符
+)
+_EMOJI_EXTRA: frozenset[int] = frozenset(
+    {0x203C, 0x2049, 0x20E3, 0x2122, 0x2139, 0x2B1B, 0x2B1C, 0x2B50, 0x2B55}
+)
+
+# 纯应答/语气词，几乎不携带日报价值（保守集合，可在配置里调）。
+NOISE_TOKENS: frozenset[str] = frozenset(
+    {
+        "嗯", "嗯嗯", "嗯哼", "哦", "哦哦", "啊", "额", "em", "emmm", "emmmmm",
+        "哈", "哈哈", "哈哈哈哈", "ok", "OK", "Ok", "okk", "okay",
+        "收到", "好的", "好", "是", "对",
+    }
+)
 
 
 def should_register_suffix_alias(suffix: str) -> bool:
@@ -382,6 +415,95 @@ def anonymize_messages(messages: list[dict[str, Any]]) -> list[AnonymizedMessage
         raise ValueError("没有可用于摘要的有效聊天消息。")
 
     return anonymized
+
+
+def _is_emoji_char(ch: str) -> bool:
+    code_point = ord(ch)
+    for low, high in _EMOJI_RANGES:
+        if low <= code_point <= high:
+            return True
+    return code_point in _EMOJI_EXTRA
+
+
+def clean_message_text(text: str) -> str:
+    """NFKC 归一化、剥离 emoji/零宽控制符、折叠空白。"""
+    normalized = unicodedata.normalize("NFKC", text)
+    stripped = "".join(ch for ch in normalized if not _is_emoji_char(ch))
+    return re.sub(r"\s+", " ", stripped).strip()
+
+
+@dataclass(frozen=True)
+class NoiseFilterStats:
+    input_count: int
+    output_count: int
+    dropped_empty: int
+    dropped_emoji_only: int
+    dropped_noise_token: int
+    dropped_flood: int
+
+
+def filter_noise_messages(
+    messages: list[AnonymizedMessage],
+    *,
+    drop_noise_tokens: bool = True,
+    drop_flood: bool = True,
+    flood_threshold: int = 3,
+) -> tuple[list[AnonymizedMessage], NoiseFilterStats]:
+    """对匿名化后的消息做规则噪声过滤。
+
+    仅丢弃：纯 emoji / 纯应答语气词 / 同人连续刷屏；保留消息会同步清洗内联 emoji。
+    返回过滤后列表与统计；列表为空时由调用方决定是否回退。
+    """
+    dropped_empty = 0
+    dropped_emoji_only = 0
+    dropped_noise_token = 0
+    dropped_flood = 0
+
+    cleaned: list[tuple[AnonymizedMessage, str]] = []
+    for message in messages:
+        had_text = bool(message.text and message.text.strip())
+        text = clean_message_text(message.text)
+        if not text:
+            if had_text:
+                dropped_emoji_only += 1
+            else:
+                dropped_empty += 1
+            continue
+        if drop_noise_tokens and text in NOISE_TOKENS:
+            dropped_noise_token += 1
+            continue
+        cleaned.append((message, text))
+
+    if drop_flood and flood_threshold > 1 and cleaned:
+        deduped: list[tuple[AnonymizedMessage, str]] = []
+        run_length = 0
+        previous_key: tuple[str, str] | None = None
+        for message, text in cleaned:
+            key = (message.speaker, text)
+            if key == previous_key:
+                run_length += 1
+                if run_length >= flood_threshold:
+                    dropped_flood += 1
+                    continue
+            else:
+                previous_key = key
+                run_length = 1
+            deduped.append((message, text))
+        cleaned = deduped
+
+    result = [
+        AnonymizedMessage(time=message.time, speaker=message.speaker, text=text)
+        for message, text in cleaned
+    ]
+    stats = NoiseFilterStats(
+        input_count=len(messages),
+        output_count=len(result),
+        dropped_empty=dropped_empty,
+        dropped_emoji_only=dropped_emoji_only,
+        dropped_noise_token=dropped_noise_token,
+        dropped_flood=dropped_flood,
+    )
+    return result, stats
 
 
 def chunk_messages(

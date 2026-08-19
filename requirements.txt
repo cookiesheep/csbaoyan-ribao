@@ -2,3 +2,7 @@ openai>=1.30.0
 python-dotenv>=1.0.0
 # 路线 B：本地 NTQQ 数据库直读所需的 protobuf 解析
 blackboxprotobuf>=1.0.0
+# === 可选：factcheck 的本地 NLI 预过滤（约 2GB，按需安装）===
+# 未安装时 factcheck 自动降级为全量 LLM 裁判，不影响 eval。
+# 安装命令：pip install "torch>=2.0" "transformers>=4.30"
+

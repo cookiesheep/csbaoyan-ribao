@@ -535,16 +535,42 @@ def inspect_db(db_path: Path, *, sample_table: str | None = None, sample_limit: 
             lines.append(f"  → 推断 blob 列: {blob_col or '(无)'}")
 
             if blob_col:
-                rows = conn.execute(f'SELECT "{blob_col}" FROM "{table}" LIMIT {int(sample_limit)}').fetchall()
-                for i, row in enumerate(rows, 1):
-                    if not row[0]:
-                        continue
-                    lines.append(f"\n### 样本消息 {i}（原始解码树）:")
-                    decoded = _decode_blob(row[0])
-                    lines.append(json.dumps(decoded, ensure_ascii=False, indent=2, default=str)[:4000])
-                    parsed = parse_record(row[0])
-                    lines.append(f"\n### 样本消息 {i}（抽取结果）:")
-                    lines.append(json.dumps(parsed.__dict__, ensure_ascii=False, indent=2, default=str))
+                existing_cols = {c["name"] for c in table_columns(conn, table)}
+                # group_msg_table：time/sender/nick 是 SQLite 列，不在 40800 blob 顶层。
+                # 必须走 parse_group_row（=真实 ingest 路径），否则样本会误报
+                # UNKNOWN_TIME / 空 sender。其余表仍用 parse_record（blob 顶层解码）。
+                use_group_path = (
+                    table == "group_msg_table"
+                    and COL_BODY in existing_cols
+                    and COL_TIME in existing_cols
+                )
+                if use_group_path:
+                    sel = [c for c in _GROUP_COLS if c in existing_cols]
+                    col_sql = ", ".join(f'"{c}"' for c in sel)
+                    sample_rows = conn.execute(
+                        f'SELECT {col_sql} FROM "{table}" ORDER BY "{COL_TIME}" DESC LIMIT {int(sample_limit)}'
+                    ).fetchall()
+                    for i, row in enumerate(sample_rows, 1):
+                        row_dict = dict(row)
+                        if not row_dict.get(COL_BODY):
+                            continue
+                        lines.append(f"\n### 样本消息 {i}（40800 body 原始解码树）:")
+                        decoded = _decode_blob(row_dict[COL_BODY])
+                        lines.append(json.dumps(decoded, ensure_ascii=False, indent=2, default=str)[:4000])
+                        lines.append(f"\n### 样本消息 {i}（列读取抽取结果 = 真实 ingest 路径）:")
+                        parsed = parse_group_row(row_dict)
+                        lines.append(json.dumps(parsed.__dict__, ensure_ascii=False, indent=2, default=str))
+                else:
+                    sample_rows = conn.execute(f'SELECT "{blob_col}" FROM "{table}" LIMIT {int(sample_limit)}').fetchall()
+                    for i, row in enumerate(sample_rows, 1):
+                        if not row[0]:
+                            continue
+                        lines.append(f"\n### 样本消息 {i}（原始解码树）:")
+                        decoded = _decode_blob(row[0])
+                        lines.append(json.dumps(decoded, ensure_ascii=False, indent=2, default=str)[:4000])
+                        parsed = parse_record(row[0])
+                        lines.append(f"\n### 样本消息 {i}（抽取结果）:")
+                        lines.append(json.dumps(parsed.__dict__, ensure_ascii=False, indent=2, default=str))
         return "\n".join(lines)
     finally:
         conn.close()

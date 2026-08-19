@@ -17,6 +17,12 @@ from ..domain.file_utils import (
     write_reports_manifest,
 )
 from ..domain.report_generation import extract_all_chunks, extract_all_chunks_structured, generate_final_report
+from ..domain.stats import (
+    PipelineStats,
+    count_extracted_items,
+    rebuild_stats_summary,
+    write_pipeline_stats,
+)
 from ..infra.openai_client import create_openai_client
 
 
@@ -37,7 +43,7 @@ class GenerateOptions:
     base_url: str | None = OPENAI_BASE_URL
     api_key: str | None = OPENAI_API_KEY
     noise_filter: bool = True
-    structured_extraction: bool = False
+    structured_extraction: bool = True
 
 
 @dataclass(frozen=True)
@@ -50,6 +56,7 @@ class GenerateArtifacts:
     manifest_count: int
     message_count: int
     chunk_count: int
+    stats_path: Path | None = None  # 付印工单路径（generate 正常流程总会写出）
 
 
 def default_report_date() -> str:
@@ -64,7 +71,10 @@ def run_generate_report(options: GenerateOptions) -> GenerateArtifacts:
     export_file = get_json_file_by_date(export_dir, target_date)
     payload = load_chat_export(export_file)
     messages = extract_messages(payload)
+    raw_message_count = len(messages)
     anonymized_messages = anonymize_messages(messages)
+    dropped_non_text = raw_message_count - len(anonymized_messages)  # 无正文/系统/撤回，未进噪声过滤
+    dropped_emoji_only = dropped_noise_token = dropped_flood = 0
     if options.noise_filter:
         filtered_messages, noise_stats = filter_noise_messages(anonymized_messages)
         logging.info(
@@ -79,6 +89,9 @@ def run_generate_report(options: GenerateOptions) -> GenerateArtifacts:
             anonymized_messages = filtered_messages
         else:
             logging.warning("规则过滤后剩余 0 条消息，回退到过滤前列表以避免空报告。")
+        dropped_emoji_only, dropped_noise_token, dropped_flood = (
+            noise_stats.dropped_emoji_only, noise_stats.dropped_noise_token, noise_stats.dropped_flood,
+        )
     chunks = chunk_messages(
         anonymized_messages,
         max_chars=options.chunk_max_chars,
@@ -132,6 +145,28 @@ def run_generate_report(options: GenerateOptions) -> GenerateArtifacts:
 
     manifest = write_reports_manifest(pages_dir)
 
+    extracted_text = extracted_path.read_text(encoding="utf-8")
+    item_count, quote_count = count_extracted_items(extracted_text)
+    stats = PipelineStats(
+        raw_messages=raw_message_count,
+        kept_messages=len(anonymized_messages),
+        dropped_total=raw_message_count - len(anonymized_messages),
+        dropped_emoji_only=dropped_emoji_only,
+        dropped_noise_token=dropped_noise_token,
+        dropped_flood=dropped_flood,
+        dropped_non_text=dropped_non_text,
+        speakers=len({m.speaker for m in anonymized_messages}),
+        chunks=len(chunks),
+        items=item_count,
+        quotes=quote_count,
+        structured=options.structured_extraction,
+        model=options.model or OPENAI_MODEL,
+        generated_at=dt.datetime.now().isoformat(timespec="seconds"),
+    )
+    stats_path = write_pipeline_stats(pages_dir, report_date, stats)
+    rebuild_stats_summary(pages_dir)
+    logging.info("付印工单已写出：%s（去噪 −%s / 要点 %s / 引用 %s）", stats_path, stats.dropped_total, stats.items, stats.quotes)
+
     logging.info("中间提取结果：%s", extracted_path)
     logging.info("脱敏聊天记录：%s", transcript_path)
     logging.info("最终日报：%s", report_path)
@@ -146,5 +181,6 @@ def run_generate_report(options: GenerateOptions) -> GenerateArtifacts:
         manifest_count=len(manifest),
         message_count=len(anonymized_messages),
         chunk_count=len(chunks),
+        stats_path=stats_path,
     )
 

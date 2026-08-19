@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..config import EXPORT_DIR, OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL, PAGES_DIR
+from ..config import EXPORT_DIR, OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL, PAGES_DIR, resolve_path
 from ..domain.file_utils import validate_report_date
 from .broadcast import broadcast_report, default_report_date
 from .generate import GenerateOptions, run_generate_report
@@ -36,7 +36,8 @@ class PipelineOptions:
     skip_telegram: bool = False
     xhs_export: bool = False
     noise_filter: bool = True
-    structured_extraction: bool = False
+    structured_extraction: bool = True
+    with_eval: bool = False
 
 
 def _resolved_report_date(report_date: str | None) -> str:
@@ -75,6 +76,33 @@ def run_pipeline(options: PipelineOptions) -> str:
             )
         )
         report_date = artifacts.report_date
+
+    if options.with_eval:
+        if artifacts is None or artifacts.stats_path is None:
+            logging.info("跳过 G-Eval：本次 pipeline 未生成日报产物。")
+        else:
+            try:
+                from ..domain.stats import attach_eval_to_stats, rebuild_stats_summary
+                from ..eval.harness import run_evaluation
+                from ..infra.openai_client import create_openai_client
+
+                logging.info("Running G-Eval (faithfulness + recall)")
+                client = create_openai_client(options.api_key, options.base_url, options.final_timeout)
+                source = artifacts.transcript_path.read_text(encoding="utf-8")
+                report = artifacts.report_path.read_text(encoding="utf-8")
+                result = run_evaluation(
+                    client, options.model or OPENAI_MODEL, source, report,
+                    retries=options.retries, temperature=0.0,
+                )
+                pages_dir = resolve_path(options.pages_dir)
+                attach_eval_to_stats(pages_dir, artifacts.report_date, result)
+                rebuild_stats_summary(pages_dir)
+                logging.info(
+                    "G-Eval 完成：忠实度 %s/5 · 召回 %s/5（average %.2f）",
+                    result.faithfulness.raw, result.recall.raw, result.average,
+                )
+            except Exception as exc:  # noqa: BLE001 - 指标缺失不阻塞出报
+                logging.warning("G-Eval 评估失败，不影响每日日报：%s", exc)
 
     if options.xhs_export:
         if artifacts is None:

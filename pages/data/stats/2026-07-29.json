@@ -1,0 +1,17 @@
+{
+  "raw_messages": 92,
+  "kept_messages": 45,
+  "dropped_total": 47,
+  "dropped_emoji_only": 0,
+  "dropped_noise_token": 0,
+  "dropped_flood": 0,
+  "dropped_non_text": 47,
+  "speakers": 20,
+  "chunks": 1,
+  "items": 13,
+  "quotes": 13,
+  "structured": true,
+  "model": "deepseek-chat",
+  "generated_at": "2026-08-19T14:20:47",
+  "eval": null
+}

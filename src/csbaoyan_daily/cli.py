@@ -58,8 +58,8 @@ def add_generate_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--structured-extraction",
         action=argparse.BooleanOptionalAction,
-        default=False,
-        help="启用引用式结构化抽取（quote+speaker+time+category+confidence，JSON 输出 + 温度降温重试）。默认关闭，建议在真实数据上 A/B 验证后再开启。",
+        default=True,
+        help="启用引用式结构化抽取（quote+speaker+time+category+confidence，JSON 输出 + 温度降温重试）。默认开启（已真实验证），--no-structured-extraction 可退回纯文本模式。",
     )
 
 
@@ -133,6 +133,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--xhs-export",
         action="store_true",
         help="Generate a structured Xiaohongshu source JSON after report generation.",
+    )
+    pipeline_parser.add_argument(
+        "--with-eval",
+        action="store_true",
+        help="出报后自动跑 G-Eval（faithfulness + recall，每期 2 次 LLM 调用），结果写入该期付印工单 stats JSON。",
     )
 
     return parser
@@ -259,6 +264,7 @@ def main(argv: list[str] | None = None) -> int:
                     skip_push=args.skip_push,
                     skip_telegram=args.skip_telegram,
                     xhs_export=args.xhs_export or XHS_EXPORT,
+                    with_eval=args.with_eval,
                 )
             )
             return 0

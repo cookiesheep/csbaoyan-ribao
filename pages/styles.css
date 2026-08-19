@@ -1066,6 +1066,170 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
   .chip { font-size: .66rem; padding: .3rem .45rem; }
 }
 
+/* =====================================================================
+   13. 付印工单 Docket —— 报头下的加工过程条
+   ===================================================================== */
+.print-docket {
+  margin: 0 0 1.15rem;
+  padding: .5rem .1rem;
+  border-top: 1px dashed var(--rule);
+  border-bottom: 1px dashed var(--rule);
+  color: var(--muted);
+}
+.docket-head {
+  display: flex;
+  align-items: baseline;
+  gap: .75rem;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.docket-title {
+  flex: none;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .3em;
+  color: var(--ink-soft);
+  writing-mode: horizontal-tb;
+}
+.docket-flow {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: .2rem .5rem;
+  font-family: var(--font-mono);
+  font-size: .7rem;
+}
+.dk-step b { color: var(--ink); font-weight: 700; font-size: .78rem; }
+.dk-step b.neg { color: var(--stamp); }
+.dk-arrow { color: var(--rule); }
+.dk-arrow.dk-final { color: var(--stamp); font-weight: 700; letter-spacing: .1em; }
+.dk-dot { color: var(--rule); }
+.docket-caret { margin-left: auto; flex: none; color: var(--muted); font-size: .7rem; transition: transform .25s var(--ease-press); }
+.print-docket.open .docket-caret { transform: rotate(180deg); }
+
+.docket-detail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .25rem .4rem;
+  align-items: baseline;
+  margin-top: .55rem;
+  padding-top: .5rem;
+  border-top: 1px dotted var(--rule-soft);
+  font-size: .72rem;
+}
+.docket-detail[hidden] { display: none; }
+.dk-k { color: var(--muted); }
+.dk-cell b { color: var(--ink); font-family: var(--font-mono); }
+.dk-sep { color: var(--rule); }
+.dk-eval { color: var(--stamp); }
+.dk-eval b { color: var(--stamp); }
+
+@media (max-width: 30rem) {
+  .docket-title { display: none; }
+}
+
+/* =====================================================================
+   14. 原话引用 —— 每条带下划线的都是群聊原话
+   ===================================================================== */
+.src-quote {
+  position: relative;
+  text-decoration: underline;
+  text-decoration-color: var(--stamp);
+  text-decoration-thickness: 1px;
+  text-underline-offset: .3em;
+  text-decoration-skip-ink: none;
+}
+.src-quote:hover { background: color-mix(in srgb, var(--stamp) 7%, transparent); }
+.src-quote::after {
+  content: '原话';
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + .1em);
+  transform: translateX(-50%) scale(.85);
+  padding: .05rem .3rem;
+  border: 1px solid var(--stamp);
+  color: var(--stamp);
+  font-size: .58rem;
+  font-weight: 700;
+  letter-spacing: .2em;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .18s var(--ease-press), transform .18s var(--ease-press);
+}
+.src-quote:hover::after { opacity: 1; transform: translateX(-50%) scale(1); }
+
+/* =====================================================================
+   15. 印房 Press Room —— 方法论页
+   ===================================================================== */
+.pressroom-view { max-width: var(--measure); margin: 0 auto; padding: 2.5rem var(--gutter) 3rem; }
+.pressroom-mast { text-align: center; }
+.pressroom-title {
+  font-family: var(--font-serif);
+  font-weight: 900;
+  font-size: clamp(1.8rem, 4vw, 2.6rem);
+  margin: .4rem 0 0;
+  letter-spacing: .04em;
+}
+
+.press-flow-list { list-style: none; margin: 2rem 0 0; padding: 0; }
+.press-step {
+  display: grid;
+  grid-template-columns: 3.2rem 1fr;
+  gap: 1rem;
+  padding: .95rem 0;
+  border-top: 1px solid var(--rule-soft);
+}
+.press-step:last-child { border-bottom: 1px solid var(--rule-soft); }
+.ps-no { font-family: var(--font-mono); font-size: .8rem; font-weight: 700; color: var(--stamp); padding-top: .3rem; }
+.ps-body h3 { margin: 0 0 .25rem; font-size: 1.02rem; font-weight: 700; }
+.ps-en {
+  font-family: var(--font-latin);
+  font-size: .62rem;
+  font-weight: 500;
+  letter-spacing: .18em;
+  color: var(--muted);
+  margin-left: .4rem;
+}
+.ps-body p { margin: 0; font-size: .88rem; color: var(--ink-soft); line-height: 1.8; }
+
+.press-quality-head { margin-top: 2.6rem; }
+.pressroom-view .press-quality-head h2 { font-family: var(--font-serif); font-size: 1.35rem; margin: .2rem 0 1rem; }
+
+.press-quality-list { margin: 0; }
+.pq-item { display: grid; grid-template-columns: 8.5rem 1fr; gap: 1rem; padding: .8rem 0; border-top: 1px dotted var(--rule-soft); }
+.pq-item dt { font-weight: 700; font-size: .9rem; }
+.pq-item dd { margin: 0; font-size: .86rem; color: var(--ink-soft); line-height: 1.75; }
+
+.press-totals {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin-top: 1rem;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+.press-total { padding: .9rem 1rem .95rem; border-right: 1px solid var(--rule-soft); }
+.press-total:last-child { border-right: 0; }
+.pt-k { margin: 0; font-family: var(--font-latin); font-size: .62rem; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); }
+.pt-v { margin: .2rem 0 .15rem; font-family: var(--font-mono); font-size: 1.5rem; font-weight: 700; color: var(--ink); }
+.pt-n { margin: 0; font-size: .72rem; color: var(--muted); line-height: 1.6; }
+
+.pressroom-actions { margin-top: 2.2rem; }
+
+@media (max-width: 45rem) {
+  .press-totals { grid-template-columns: repeat(2, 1fr); }
+  .press-total:nth-child(2) { border-right: 0; }
+  .press-total:nth-child(-n+2) { border-bottom: 1px solid var(--rule-soft); }
+  .pq-item { grid-template-columns: 1fr; gap: .2rem; }
+}
+
 /* 打印 —— 真正印在纸上 */
 @media print {
   body { background: #fff; color: #000; }

@@ -53,6 +53,7 @@ function cacheElements() {
     'theme-toggle', 'view-toggle', 'toc', 'toc-list',
     'search-btn', 'search-modal', 'search-backdrop', 'search-input',
     'close-search-btn', 'search-results', 'ink-roller', 'toast',
+    'pressroom-view', 'pressroom-back-btn', 'home-sift-count',
   ];
   for (const id of ids) {
     const key = id.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
@@ -241,6 +242,12 @@ function buildNewspaper(html, ctx) {
   }
   newspaper.appendChild(mast);
 
+  /* ---- 付印工单 docket（有 stats 才渲染）---- */
+  if (ctx.stats) {
+    const docket = makePrintDocket(ctx.stats, 0.14);
+    if (docket) newspaper.appendChild(docket);
+  }
+
   /* ---- 免责声明 colophon ---- */
   if (meta.colophon) {
     newspaper.appendChild(el('p', 'colophon ink-reveal', escapeHtml(meta.colophon)));
@@ -310,6 +317,118 @@ function attachClippable(root) {
     btn.setAttribute('aria-label', '剪报：复制本段');
     li.appendChild(btn);
   });
+}
+
+/* =====================================================================
+   付印工单 Docket —— 把这期报纸的加工过程印在报头下
+   ===================================================================== */
+async function fetchStats(date) {
+  try {
+    const res = await fetch(`./data/stats/${date}.json`, { cache: 'no-store' });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch { return null; }
+}
+
+function makeDocketDetailLine(label, value, cls) {
+  return `<span class="dk-cell"><span class="dk-k">${label}</span> <b class="${cls || ''}">${value}</b></span>`;
+}
+
+function makePrintDocket(stats, delay) {
+  if (!stats) return null;
+  const raw = Number(stats.raw_messages) || 0;
+  const kept = Number(stats.kept_messages) || 0;
+  const dropped = Number(stats.dropped_total) || 0;
+  const speakers = Number(stats.speakers) || 0;
+  const items = Number(stats.items) || 0;
+  const quotes = Number(stats.quotes) || 0;
+
+  const box = el('div', 'print-docket ink-reveal');
+  box.style.setProperty('--ink-delay', `${delay}s`);
+  box.style.setProperty('--rule-delay', `${delay}s`);
+
+  const head = el('button', 'docket-head');
+  head.type = 'button';
+  head.setAttribute('aria-expanded', 'false');
+  head.innerHTML =
+    `<span class="docket-title">付印工单</span>` +
+    `<span class="docket-flow">` +
+    `<span class="dk-step">原始 <b>${raw}</b> 条</span>` +
+    (dropped ? `<span class="dk-arrow">→</span><span class="dk-step">去噪 <b class="neg">−${dropped}</b></span>` : ``) +
+    `<span class="dk-arrow">→</span><span class="dk-step">有效 <b>${kept}</b> 条</span>` +
+    `<span class="dk-dot">·</span><span class="dk-step"><b>${speakers}</b> 位发言者</span>` +
+    `<span class="dk-arrow">→</span><span class="dk-step">要点 <b>${items}</b></span>` +
+    `<span class="dk-dot">·</span><span class="dk-step">原话 <b>${quotes}</b></span>` +
+    `<span class="dk-arrow dk-final">付印</span>` +
+    `</span>` +
+    `<span class="docket-caret" aria-hidden="true">▾</span>`;
+  box.appendChild(head);
+
+  const detail = el('div', 'docket-detail');
+  detail.hidden = true;
+  const cells = [
+    makeDocketDetailLine('非文本', Number(stats.dropped_non_text) || 0, 'neg'),
+    makeDocketDetailLine('纯 emoji', Number(stats.dropped_emoji_only) || 0),
+    makeDocketDetailLine('应答语气词', Number(stats.dropped_noise_token) || 0),
+    makeDocketDetailLine('同人刷屏', Number(stats.dropped_flood) || 0),
+    makeDocketDetailLine('分块', Number(stats.chunks) || 0),
+    makeDocketDetailLine('抽取模式', stats.structured ? '引用式结构化' : '自由摘要'),
+  ];
+  if (stats.model) cells.push(makeDocketDetailLine('模型', escapeHtml(String(stats.model))));
+  const ev = stats.eval;
+  if (ev && typeof ev.faithfulness === 'number') {
+    cells.push(
+      `<span class="dk-cell dk-eval">忠实度 <b>${ev.faithfulness}/5</b> · 召回 <b>${ev.recall}/5</b></span>`
+    );
+  }
+  detail.innerHTML = cells.join('<span class="dk-sep">／</span>');
+  box.appendChild(detail);
+
+  head.addEventListener('click', () => {
+    const open = detail.hidden;
+    detail.hidden = !open;
+    head.setAttribute('aria-expanded', String(open));
+    box.classList.toggle('open', open);
+  });
+  return box;
+}
+
+/* =====================================================================
+   原话引用排版 —— “……”／「……」（User_N @ t）标成可辨识的原话
+   ===================================================================== */
+const QUOTE_PAIR_RE = /[“][^“”]{2,120}[”]|「[^「」]{2,120}」(?:（[^（）]{2,40}）)?/g;
+
+function decorateSourceQuotes(root) {
+  const skip = 'script, style, .src-quote, .clip-btn, .print-docket, .pullquote';
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode: n => (
+      (n.parentElement && n.parentElement.closest(skip)) || !/[“「]/.test(n.nodeValue)
+        ? NodeFilter.FILTER_REJECT
+        : NodeFilter.FILTER_ACCEPT
+    ),
+  });
+  const targets = [];
+  while (walker.nextNode()) targets.push(walker.currentNode);
+  for (const node of targets) {
+    const text = node.nodeValue;
+    QUOTE_PAIR_RE.lastIndex = 0;
+    let m;
+    let last = 0;
+    let matched = false;
+    const frag = document.createDocumentFragment();
+    while ((m = QUOTE_PAIR_RE.exec(text))) {
+      matched = true;
+      if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+      const span = document.createElement('span');
+      span.className = 'src-quote';
+      span.textContent = m[0];
+      frag.appendChild(span);
+      last = m.index + m[0].length;
+    }
+    if (!matched) continue;
+    if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+    node.parentNode.replaceChild(frag, node);
+  }
 }
 
 /* =====================================================================
@@ -384,12 +503,47 @@ function showHomeView() {
   closeDateSwitcher();
   elements.homeView.hidden = false;
   elements.readerView.hidden = true;
+  if (elements.pressroomView) elements.pressroomView.hidden = true;
   document.title = '保研日报 · CS 保研信息日报';
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 function showReaderView() {
   elements.homeView.hidden = true;
   elements.readerView.hidden = false;
+  if (elements.pressroomView) elements.pressroomView.hidden = true;
+}
+function showPressroomView() {
+  closeDateSwitcher();
+  elements.homeView.hidden = true;
+  elements.readerView.hidden = true;
+  if (elements.pressroomView) elements.pressroomView.hidden = false;
+  document.title = '印房 · 保研日报';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  loadPressTotals();
+}
+
+async function loadPressTotals() {
+  const fields = [
+    ['pt-raw', 'total_raw_messages'],
+    ['pt-dropped', 'total_dropped_total'],
+    ['pt-quotes', 'total_quotes'],
+    ['pt-editions', 'editions'],
+  ];
+  try {
+    const res = await fetch('./data/stats/summary.json', { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const s = await res.json();
+    for (const [id, key] of fields) {
+      const node = document.getElementById(id);
+      if (node) node.textContent = Number(s[key] || 0).toLocaleString();
+    }
+    if (elements.homeSiftCount) {
+      elements.homeSiftCount.textContent = `${Number(s.total_dropped_total || 0).toLocaleString()} 条`;
+    }
+  } catch (e) {
+    console.error(e);
+    if (elements.homeSiftCount) elements.homeSiftCount.textContent = '— 条';
+  }
 }
 
 function setReportCount(n) {
@@ -422,7 +576,10 @@ async function loadReport(date) {
 
   try {
     if (!item.md_path) throw new Error('Missing report path');
-    const response = await fetch(`./data/${item.md_path}`, { cache: 'no-store', signal });
+    const [response, stats] = await Promise.all([
+      fetch(`./data/${item.md_path}`, { cache: 'no-store', signal }),
+      fetchStats(item.date),
+    ]);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const markdown = await response.text();
     const safeHtml = renderMarkdown(markdown);
@@ -433,8 +590,10 @@ async function loadReport(date) {
       issueRoman: toRoman(issueNo),
       weekday: weekdayOf(item.date),
       phrases: buildTickerPhrases(markdown),
+      stats,
     };
     const { newspaper, sections } = buildNewspaper(safeHtml, ctx);
+    decorateSourceQuotes(newspaper);
 
     elements.reportContent.replaceChildren(newspaper);
     elements.loadingState.style.display = 'none';
@@ -720,6 +879,7 @@ function initHome() {
     if (latest) setHashDate(latest.date);
   });
   elements.homeSearchBtn?.addEventListener('click', openSearch);
+  elements.pressroomBackBtn?.addEventListener('click', goHome);
 }
 
 function initKeyboard() {
@@ -754,11 +914,17 @@ async function loadManifest() {
     }
     renderHomeView();
     setReportCount(state.manifest.length);
+    loadPressTotals();
     const target = getHashDate();
     if (!target) {
       elements.loadingState.style.display = 'none';
       renderDateSwitcher();
       showHomeView();
+      return;
+    }
+    if (target === 'pressroom') {
+      elements.loadingState.style.display = 'none';
+      showPressroomView();
       return;
     }
     if (!state.manifest.some(i => i.date === target)) { setHashDate(state.manifest[0].date); return; }
@@ -777,6 +943,7 @@ window.addEventListener('hashchange', () => {
   if (!state.manifest.length) return;
   const h = getHashDate();
   if (!h) { showHomeView(); return; }
+  if (h === 'pressroom') { showPressroomView(); return; }
   if (!state.manifest.some(i => i.date === h)) { setHashDate(state.manifest[0].date); return; }
   loadReport(h);
 });

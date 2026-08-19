@@ -33,6 +33,7 @@
         保研日报<span class="brand-mini-sub">Living Press</span>
       </a>
       <div class="utility-tools">
+        <a href="#pressroom" class="chip" id="pressroom-link" aria-label="印房：这份报纸怎么印出来的">印房</a>
         <a href="https://github.com/cookiesheep/csbaoyan-ribao" target="_blank" rel="noopener noreferrer" class="chip" aria-label="GitHub 仓库">
           <svg aria-hidden="true" height="15" viewBox="0 0 16 16" width="15" fill="currentColor"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"></path></svg>
           GitHub
@@ -84,9 +85,9 @@
             <p class="front-stat-note">按日期翻阅，或用检索定位具体院校、导师与项目。</p>
           </article>
           <article class="front-stat">
-            <p class="front-stat-kicker">Verify</p>
-            <p class="front-stat-value">AI 排版</p>
-            <p class="front-stat-note">内容由 AI 归纳，仅供参考；时效与未核实信息请以官方为准。</p>
+            <p class="front-stat-kicker">Sift</p>
+            <p class="front-stat-value" id="home-sift-count">— 条</p>
+            <p class="front-stat-note">累计筛除的表情、刷屏等噪声；只有有效讨论才进版面。<a href="#pressroom">看看怎么印的 →</a></p>
           </article>
         </section>
 
@@ -96,6 +97,116 @@
         </section>
         <div class="archive-list" id="recent-reports-list">
           <div class="archive-empty">正在加载最近日报…</div>
+        </div>
+      </section>
+
+      <!-- ============ 印房 · 这份报纸怎么印出来的 ============ -->
+      <section class="pressroom-view" id="pressroom-view" hidden>
+        <header class="pressroom-mast">
+          <p class="frontpage-eyebrow">The Press Room · 排印房</p>
+          <h1 class="pressroom-title">这份报纸是怎么印出来的</h1>
+          <div class="double-rule"></div>
+        </header>
+
+        <p class="frontpage-stand">
+          每一期日报都不是「把聊天记录丢给 AI」。在你看正文之前，每条消息要过<em>五道工序</em>——
+          下面是印房里真实发生的事，每一期报头下的<em>付印工单</em>就是当天的加工记录。
+        </p>
+
+        <section class="press-flow" aria-label="五道工序">
+          <ol class="press-flow-list">
+            <li class="press-step">
+              <span class="ps-no">01</span>
+              <div class="ps-body">
+                <h3>采集 <span class="ps-en">INGEST</span></h3>
+                <p>每天清晨从本地聊天数据库读取目标群前一天的完整消息。纯本地文件读取，不创建登录会话、不碰协议。</p>
+              </div>
+            </li>
+            <li class="press-step">
+              <span class="ps-no">02</span>
+              <div class="ps-body">
+                <h3>脱敏 <span class="ps-en">REDACT</span></h3>
+                <p>所有发言者替换为 User_01 式代号；昵称、QQ 号、链接与敏感信息在进入模型前被移除，存档同样只保留代号。</p>
+              </div>
+            </li>
+            <li class="press-step">
+              <span class="ps-no">03</span>
+              <div class="ps-body">
+                <h3>去噪 <span class="ps-en">SIFT</span></h3>
+                <p>纯表情、应答语气词、同人连续刷屏由规则筛除——每期筛掉多少条、筛掉了什么类别，工单上印得清清楚楚。</p>
+              </div>
+            </li>
+            <li class="press-step">
+              <span class="ps-no">04</span>
+              <div class="ps-body">
+                <h3>抽取 <span class="ps-en">EXTRACT</span></h3>
+                <p>分块送入模型提炼要点。引用式抽取要求每条要点附带「原话 + 说话人 + 时间」——无据不成句，编不出来。</p>
+              </div>
+            </li>
+            <li class="press-step">
+              <span class="ps-no">05</span>
+              <div class="ps-body">
+                <h3>编辑 <span class="ps-en">EDIT</span></h3>
+                <p>汇总排版为今日概览 / 重要信息 / 经验观点 / 风险待核实四个版面，生成付印工单后发布。</p>
+              </div>
+            </li>
+          </ol>
+        </section>
+
+        <section class="press-quality-head">
+          <p class="reader-label">Quality</p>
+          <h2>质量体系</h2>
+        </section>
+        <div class="press-quality">
+          <dl class="press-quality-list">
+            <div class="pq-item">
+              <dt>原话可溯源</dt>
+              <dd>正文里所有带朱红下划线的引文都逐字来自当日群聊——出自哪位发言者、几点说的，引用标记都可查。</dd>
+            </div>
+            <div class="pq-item">
+              <dt>G-Eval 评估</dt>
+              <dd>（可选开启）每期出报后由独立评审提示词打「忠实度 / 召回率」分，防止内容偏离原始讨论。展开付印工单可见。</dd>
+            </div>
+            <div class="pq-item">
+              <dt>事实核查</dt>
+              <dd>factcheck 把日报拆成原子声明逐条判定：有依据 / 相冲突 / 依据不足。任何一条失实都能被定位到句。</dd>
+            </div>
+            <div class="pq-item">
+              <dt>免责边界</dt>
+              <dd>群聊是个人经验与传闻，日报只做归纳、不做背书；时效与招生政策请以官方通知为准。</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="press-quality-head">
+          <p class="reader-label">Ledger</p>
+          <h2>累计大盘</h2>
+        </section>
+        <div class="press-totals" id="press-totals" aria-label="累计加工大盘">
+          <article class="press-total">
+            <p class="pt-k">Ingested</p>
+            <p class="pt-v" id="pt-raw">—</p>
+            <p class="pt-n">累计读取的原始群消息</p>
+          </article>
+          <article class="press-total">
+            <p class="pt-k">Sifted</p>
+            <p class="pt-v" id="pt-dropped">—</p>
+            <p class="pt-n">累计筛除的表情、刷屏与应答噪声</p>
+          </article>
+          <article class="press-total">
+            <p class="pt-k">Quoted</p>
+            <p class="pt-v" id="pt-quotes">—</p>
+            <p class="pt-n">累计保留的原话引用</p>
+          </article>
+          <article class="press-total">
+            <p class="pt-k">Editions</p>
+            <p class="pt-v" id="pt-editions">—</p>
+            <p class="pt-n">附加工单统计的期数</p>
+          </article>
+        </div>
+
+        <div class="frontpage-actions">
+          <button class="btn btn-ghost" id="pressroom-back-btn" type="button">← 回到头版</button>
         </div>
       </section>
 

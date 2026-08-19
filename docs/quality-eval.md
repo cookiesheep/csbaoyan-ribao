@@ -99,12 +99,38 @@ pip install "torch>=2.0" "transformers>=4.30"
 
 ---
 
+## 3. 付印统计与前端展示（编辑部透明度）
+
+`generate` 每次出报都会顺手写一份**付印工单**（确定性计数，零 LLM 调用）：
+
+```
+pages/data/stats/<date>.json    # 每期一份：原始消息数 / 去噪构成 / 发言者数 / 分块数 / 要点数 / 原话引用数 / 抽取模式 / 模型
+pages/data/stats/summary.json   # 全期聚合：期数 + 各项累计 + latest_eval（首页/印房页一次拉取）
+```
+
+- 位于 `publish` 的 pathspec（`pages/data`）内，**随站点自动发布**；只存计数，不存任何消息内容。
+- 前端围绕它渲染三个可见组件（Living Press 语言）：
+  - **付印流程单 Docket**：每期报头下方一条「原始 N → 去噪 −N → 有效 N · N 位发言者 → 要点 N · 原话 N → 付印」，可展开看去噪构成与 G-Eval 分数。
+  - **原话引用排版**：正文中 “...” / 「...」 引用统一加朱红下划线 + 「原话」角标。
+  - **印房页**（`#pressroom`）：五段流水线说明 + 质量体系 + 累计大盘（读 `summary.json`）。
+- 历史期数（升级前生成的）没有 stats JSON：前端 fetch 404 时静默缺省，不渲染 docket、不报错。
+
+### `--with-eval`：出报后自动打分（opt-in）
+
+```powershell
+PYTHONPATH=src python -m csbaoyan_daily.cli pipeline --with-eval
+```
+
+generate 成功后对当期跑一次 G-Eval（2 次 LLM 调用），把 faithfulness/recall 写进该期 stats JSON 的 `eval` 字段并刷新 `summary.json`（前端 docket 与印房页自动展示）。评估失败只记 warning，**不阻塞出报**。裁判仍与生成共用 `.env` 配置——想规避自偏好，用独立的 `pipeline --base-url/--api-key/--model` 覆盖，或继续用离线 `cli eval` 配不同厂商裁判。
+
+---
+
 ## 与生产流水线的关系
 
 `eval` / `factcheck` 是**只读、离线**的质量度量工具：
 
 - 输入：`generate` 已产出的 `pages/data/reports/<date>.md` + `internal/transcripts/<date>.txt`。
 - 输出：只打印或写到 `internal/`（不会进 `pages/`，不影响发布的站点）。
-- 不改 `generate / verify / publish / broadcast / pipeline` 任何逻辑。
+- 不改 `generate / verify / publish / broadcast` 任何逻辑；`pipeline` 仅在显式传 `--with-eval` 时才追加一次 G-Eval（见上节）。
 
 推荐用法：每天 `pipeline` 出报后，对关键日期或抽检日期跑一次 `eval` + `factcheck`，跟踪 faithful/recall/support_rate 的趋势。

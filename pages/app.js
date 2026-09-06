@@ -520,6 +520,7 @@ function showPressroomView() {
   document.title = '印房 · 保研日报';
   window.scrollTo({ top: 0, behavior: 'smooth' });
   loadPressTotals();
+  fetchReaderCount();
 }
 
 async function loadPressTotals() {
@@ -544,6 +545,31 @@ async function loadPressTotals() {
     console.error(e);
     if (elements.homeSiftCount) elements.homeSiftCount.textContent = '— 条';
   }
+}
+
+/* =====================================================================
+   读者计数 · 发行量 —— 独立访客（cookie 去重，服务端计数）
+   ===================================================================== */
+let readerCountCache = null;
+
+async function fetchReaderCount() {
+  const fill = (n) => {
+    const text = Number(n).toLocaleString();
+    const home = document.getElementById('home-reader-count');
+    const pt = document.getElementById('pt-readers');
+    if (home) home.textContent = text;
+    if (pt) pt.textContent = text;
+  };
+  if (readerCountCache != null) { fill(readerCountCache); return; }
+  try {
+    const res = await fetch('api/count', { method: 'POST', cache: 'no-store' });
+    if (!res.ok) return;
+    const data = await res.json();
+    const n = Number(data && data.visitors);
+    if (!Number.isFinite(n) || n < 0) return;
+    readerCountCache = n;
+    fill(n);
+  } catch { /* 计数服务未部署（如 Pages 镜像）或离线：保持「—」 */ }
 }
 
 function setReportCount(n) {
@@ -628,6 +654,7 @@ function buildTickerPhrases(markdown) {
    ===================================================================== */
 function renderHomeView() {
   if (!elements.latestReportDate || !elements.homeReportCount || !elements.recentReportsList) return;
+  fetchReaderCount();
   elements.homeReportCount.textContent = `${state.manifest.length} 期`;
   if (!state.manifest.length) {
     elements.latestReportDate.textContent = '暂无';

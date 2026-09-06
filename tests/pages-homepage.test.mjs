@@ -54,4 +54,11 @@ assert.match(stylesCss, /\.pressroom-view\b/, "styles.css should style the press
 assert.match(stylesCss, /\.press-flow-list\b/, "styles.css should style the press flow list");
 assert.match(stylesCss, /\.press-totals\b/, "styles.css should style the press totals grid");
 
+// 来访统计：独立读者计数（发行量）
+assert.match(indexHtml, /id="home-reader-count"/, "homepage front-stats should expose a readers card");
+assert.match(indexHtml, /id="pt-readers"/, "pressroom totals should expose a readers card");
+assert.match(appJs, /function\s+fetchReaderCount\s*\(/, "app.js should fetch the visitor count");
+assert.match(appJs, /["']api\/count["']/, "reader count should POST the local counter endpoint");
+assert.match(stylesCss, /repeat\(5,\s*1fr\)/, "press totals grid should hold a fifth card");
+
 console.log("pages static assertions passed");

@@ -11,7 +11,7 @@
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://csbaoyan.cn" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22%23f4ede0%22/><text x=%2250%22 y=%2274%22 font-size=%2272%22 text-anchor=%22middle%22 font-family=%22serif%22 font-weight=%22900%22 fill=%22%23b8302a%22>保</text></svg>" />
-  <link rel="stylesheet" href="./styles.css?v=20260730d" />
+  <link rel="stylesheet" href="./styles.css?v=20260906a" />
   <script>
     const savedTheme = localStorage.getItem('theme') || 'system';
     if (savedTheme === 'dark' || (savedTheme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
@@ -22,7 +22,7 @@
   </script>
   <script defer src="./vendor/marked.min.js"></script>
   <script defer src="./vendor/purify.min.js"></script>
-  <script defer src="./app.js?v=20260730c"></script>
+  <script defer src="./app.js?v=20260906a"></script>
 </head>
 
 <body>
@@ -88,6 +88,11 @@
             <p class="front-stat-kicker">Sift</p>
             <p class="front-stat-value" id="home-sift-count">— 条</p>
             <p class="front-stat-note">累计筛除的表情、刷屏等噪声；只有有效讨论才进版面。<a href="#pressroom">看看怎么印的 →</a></p>
+          </article>
+          <article class="front-stat">
+            <p class="front-stat-kicker">Readers</p>
+            <p class="front-stat-value" id="home-reader-count">—</p>
+            <p class="front-stat-note">累计独立读者，仅作参考。</p>
           </article>
         </section>
 
@@ -182,7 +187,7 @@
           <p class="reader-label">Ledger</p>
           <h2>累计大盘</h2>
         </section>
-        <div class="press-totals" id="press-totals" aria-label="累计加工大盘">
+        <div class="press-totals" id="press-totals" aria-label="累计大盘">
           <article class="press-total">
             <p class="pt-k">Ingested</p>
             <p class="pt-v" id="pt-raw">—</p>
@@ -202,6 +207,11 @@
             <p class="pt-k">Editions</p>
             <p class="pt-v" id="pt-editions">—</p>
             <p class="pt-n">附加工单统计的期数</p>
+          </article>
+          <article class="press-total">
+            <p class="pt-k">Readers</p>
+            <p class="pt-v" id="pt-readers">—</p>
+            <p class="pt-n">累计独立读者（去重计数）</p>
           </article>
         </div>
 

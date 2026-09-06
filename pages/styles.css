@@ -271,10 +271,10 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 .btn-ghost { border: 1px solid var(--ink); color: var(--ink); }
 .btn-ghost:hover { background: var(--ink); color: var(--paper); text-decoration: none; }
 
-/* 头版三栏摘要 */
+/* 头版摘要栏（卡数自适应，宽屏一行四卡） */
 .front-stats {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
   margin: 2.5rem 0;
   border-block: 1px solid var(--rule);
 }
@@ -1210,7 +1210,7 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 
 .press-totals {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   margin-top: 1rem;
   border-top: 1px solid var(--rule);
   border-bottom: 1px solid var(--rule);
@@ -1225,8 +1225,10 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 
 @media (max-width: 45rem) {
   .press-totals { grid-template-columns: repeat(2, 1fr); }
-  .press-total:nth-child(2) { border-right: 0; }
-  .press-total:nth-child(-n+2) { border-bottom: 1px solid var(--rule-soft); }
+  .press-total { border-bottom: 1px solid var(--rule-soft); }
+  .press-total:nth-child(odd) { border-right: 1px solid var(--rule-soft); }
+  .press-total:nth-child(even) { border-right: 0; }
+  .press-total:last-child { border-bottom: 0; border-right: 0; grid-column: 1 / -1; }
   .pq-item { grid-template-columns: 1fr; gap: .2rem; }
 }
 

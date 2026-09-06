@@ -77,14 +77,17 @@ class VisitCounterHttpTests(unittest.TestCase):
         self.server = _Server()
         self.addCleanup(self.server.close)
 
-    def _request(self, method: str, cookie: str | None = None, forwarded_for: str | None = None):
+    def _request(self, method: str, cookie: str | None = None, forwarded_for: str | None = None,
+                 cf_ip: str | None = None, path: str = "/count"):
         conn = http.client.HTTPConnection("127.0.0.1", self.server.port, timeout=5)
         headers = {}
         if cookie:
             headers["Cookie"] = cookie
         if forwarded_for:
             headers["X-Forwarded-For"] = forwarded_for
-        conn.request(method, "/count", headers=headers)
+        if cf_ip:
+            headers["CF-Connecting-IP"] = cf_ip
+        conn.request(method, path, headers=headers)
         resp = conn.getresponse()
         body = json.loads(resp.read().decode("utf-8"))
         set_cookie = resp.getheader("Set-Cookie")
@@ -131,6 +134,21 @@ class VisitCounterHttpTests(unittest.TestCase):
         body, _ = self._request("POST", forwarded_for="9.9.9.9")
         self.assertEqual(body["visitors"], 1)
         body, _ = self._request("POST", forwarded_for="8.8.8.8")
+        self.assertEqual(body["visitors"], 2)
+
+    def test_api_count_path_accepted(self) -> None:
+        """cloudflared 不改写路径：前端请求 /api/count 必须直达。"""
+        body, set_cookie = self._request("POST", cf_ip="7.7.7.7", path="/api/count")
+        self.assertEqual(body["visitors"], 1)
+        self.assertIsNotNone(set_cookie)
+        body, _ = self._request("GET", path="/api/count")
+        self.assertEqual(body["visitors"], 1)
+
+    def test_cf_connecting_ip_preferred_for_rate_limit(self) -> None:
+        """CF-Connecting-IP 是 cloudflared 的权威访客 IP：不同访客不受彼此限流。"""
+        body, _ = self._request("POST", cf_ip="5.5.5.5", forwarded_for="7.7.7.7")
+        self.assertEqual(body["visitors"], 1)
+        body, _ = self._request("POST", cf_ip="6.6.6.6", forwarded_for="7.7.7.7")
         self.assertEqual(body["visitors"], 2)
 
     def test_unknown_path_returns_404(self) -> None:

@@ -133,25 +133,33 @@ def create_handler(store: CountStore, limiter: RateLimiter):
 
         # ---- 请求上下文 ----
         def _client_key(self) -> str:
-            # 仅在反代后使用：nginx 用 $remote_addr 覆盖此头，不可伪造
+            # 仅在反代后使用（本服务只监听 127.0.0.1）：
+            # cloudflared 会带 CF-Connecting-IP / X-Forwarded-For，取真实访客 IP 做限流
+            cf_ip = self.headers.get("CF-Connecting-IP", "").strip()
+            if cf_ip:
+                return cf_ip
             forwarded = self.headers.get("X-Forwarded-For", "")
             if forwarded:
                 return forwarded.split(",")[0].strip()
             return self.client_address[0] if self.client_address else "unknown"
 
         def _is_https(self) -> bool:
-            # 反代会带上 X-Forwarded-Proto: https，此时 cookie 附加 Secure
+            # cloudflared/反代会带上 X-Forwarded-Proto: https，此时 cookie 附加 Secure
             return self.headers.get("X-Forwarded-Proto", "").strip().lower() == "https"
+
+        def _route(self) -> bool:
+            # cloudflared 不改写路径：站点前端请求 /api/count，本服务两个路径都认
+            return self.path.split("?", 1)[0] in ("/count", "/api/count")
 
         # ---- 路由 ----
         def do_GET(self) -> None:  # 只读
-            if self.path.split("?", 1)[0] != "/count":
+            if not self._route():
                 self._send_json(404, {"error": "not found"})
                 return
             self._send_json(200, {"visitors": store.visitors()})
 
         def do_POST(self) -> None:
-            if self.path.split("?", 1)[0] != "/count":
+            if not self._route():
                 self._send_json(404, {"error": "not found"})
                 return
             if parse_visitor_cookie(self.headers.get("Cookie")):

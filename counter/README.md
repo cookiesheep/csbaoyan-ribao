@@ -15,21 +15,28 @@
 
 | 方法 | 路径 | 行为 |
 |------|------|------|
-| POST | `/count` | 无 cookie：+1 并 Set-Cookie；有 cookie：只读 |
-| GET | `/count` | 只读当前总数 |
+| POST | `/count` 或 `/api/count` | 无 cookie：+1 并 Set-Cookie；有 cookie：只读 |
+| GET | `/count` 或 `/api/count` | 只读当前总数 |
+
+两个路径都认：cloudflared 隧道不改写路径，前端请求的 `/api/count` 原样到达。
 
 ## 本地试跑
 
 ```bash
 python3 visit_counter.py --port 8001 --data-dir ./data
-curl -X POST http://127.0.0.1:8001/count   # → {"visitors": 1}，响应带 Set-Cookie
-curl -X POST http://127.0.0.1:8001/count   # → {"visitors": 1}（同 IP 限流内不加数）
-curl http://127.0.0.1:8001/count           # → {"visitors": 1}
+curl -X POST http://127.0.0.1:8001/count        # → {"visitors": 1}，响应带 Set-Cookie
+curl -X POST http://127.0.0.1:8001/count        # → {"visitors": 1}（同 IP 限流内不加数）
+curl -X POST http://127.0.0.1:8001/api/count    # → 同上，等价路径
+curl http://127.0.0.1:8001/count                # → {"visitors": 1}
 ```
 
-## 服务器部署（csbaoyan.cn）
+## 服务器部署（csbaoyan.cn，按现网拓扑）
 
-### 1. 上传
+现网链路：**cloudflared 隧道**（`cloudflared-csbaoyan`）→ 本机 `127.0.0.1:3002` 静态服务
+（`/var/www/csbaoyan`）。没有 nginx；前端文件**不会**随每日任务自动上传（定时任务只传
+`data/reports/*.md` 和 `data/reports.json`），改前端都要手动 scp。
+
+### 1. 上传计数器
 
 ```bash
 # 本地（repo 根目录执行）
@@ -64,32 +71,45 @@ systemctl enable --now csbaoyan-counter
 curl -X POST http://127.0.0.1:8001/count   # 应答 {"visitors": 1}
 ```
 
-### 3. nginx 反代
+### 3. cloudflared 加一条路径规则
 
-在 csbaoyan.cn 站点的 `server` 块里加：
+编辑 `/root/.cloudflared/csbaoyan-config.yml`，在**现有的 csbaoyan.cn 总规则之前**加一条
+path 规则（ingress 按首条匹配）：
 
-```nginx
-location = /api/count {
-    proxy_pass http://127.0.0.1:8001/count;
-    proxy_set_header X-Forwarded-For $remote_addr;
-    proxy_set_header X-Forwarded-Proto $scheme;
-}
+```yaml
+ingress:
+  - hostname: csbaoyan.cn
+    path: ^/api/count$
+    service: http://127.0.0.1:8001
+  # ……以下保持原有规则不动（csbaoyan.cn → http://127.0.0.1:3002 等）
 ```
-
-`X-Forwarded-Proto` 让 cookie 在 https 站点上自动附加 `Secure` 属性。
 
 ```bash
-nginx -t && systemctl reload nginx
+systemctl restart cloudflared-csbaoyan
+curl -X POST https://csbaoyan.cn/api/count   # 应答 {"visitors": 2}
 ```
 
-### 4. 验证
+cloudflared 会带上 `CF-Connecting-IP`（真实访客 IP，用于限流去重）和
+`X-Forwarded-Proto: https`（cookie 自动附加 `Secure`）。
+
+### 4. 同步前端（首页/印房 Readers 卡）
+
+```bash
+scp -P 6543 pages/index.html pages/app.js pages/styles.css root@122.9.99.104:/var/www/csbaoyan/
+curl -s https://csbaoyan.cn/app.js | grep -c fetchReaderCount   # 应输出 1
+```
+
+> 这一步同时也是 8-19「编辑部透明度」（印房页/付印工单）的上线步骤——那批前端
+> 文件当时也没同步过服务器。
+
+### 5. 验证
 
 打开 https://csbaoyan.cn —— 首页 Readers 卡与印房「累计大盘」的 Readers 卡应显示数字；
 刷新页面数字**不变**；换无痕窗口（或清 cookie）再开，+1。
 
 ## 注意
 
-- 服务只应监听 `127.0.0.1`（默认如此），由 nginx 反代对外；直接暴露端口可被伪造
-  `X-Forwarded-For` 刷量
+- 服务只应监听 `127.0.0.1`（默认如此），只经 cloudflared 对外；直接暴露端口可被伪造
+  `CF-Connecting-IP` / `X-Forwarded-For` 刷量
 - GitHub Pages 镜像没有后端，Readers 卡会一直显示「—」，属预期降级
 - 想重置计数：`systemctl stop csbaoyan-counter`，删掉 `data/count.json` 再 start

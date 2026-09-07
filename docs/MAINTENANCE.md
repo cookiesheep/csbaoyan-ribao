@@ -67,6 +67,12 @@
 powershell -ExecutionPolicy Bypass -File D:\code\csbaoyan\daily_auto.ps1 -Date 2026-07-30
 ```
 
+如果 QQ 当前未运行，但运维人员已经确认 `output\<QQ号>\nt_msg.db` 是最近一次成功解密、且包含待补日期，可显式复用该数据库：
+```powershell
+powershell -ExecutionPolicy Bypass -File D:\code\csbaoyan\daily_auto.ps1 -Date 2026-07-30 -UseExistingDatabase
+```
+`-UseExistingDatabase` 只用于人工历史补数，计划任务不得配置该参数。日志会记录数据库路径和最后修改时间，避免悄悄使用陈旧数据。
+
 **只重新生成不重新解密**（密钥没变、库已解密）：
 ```powershell
 cd D:\code\csbaoyan
@@ -185,8 +191,10 @@ curl -I https://csbaoyan.cn/             # ⑥ 外网可达？
 4. 若「未找到日期的导出文件」→ 那天 QQ 没同步到消息（机器关过？），QQ 登录拉一下离线消息后补跑
 
 ### 症状：DeepSeek 报错（生成失败）
-- 看 `.env` 的 `OPENAI_API_KEY` 是否有效 / 余额是否充足
-- 临时换模型/调参：`pipeline --model deepseek-reasoner --max-workers 2`
+- 当前模型名使用 `deepseek-v4-flash` 或 `deepseek-v4-pro`；`deepseek-chat` / `deepseek-reasoner` 已停用，生产脚本会在调用前给出 `MODEL_CONFIG_INVALID`。
+- `.env` 的 `OPENAI_API_KEY` 是主 Key；可选 `OPENAI_FALLBACK_API_KEY` 仅在主 Key 明确返回余额/配额不足时启用。普通超时、网络错误、429 限流不会切换，避免双 Key 重复消耗。
+- 客户端对 DeepSeek 采用直连，不继承 Windows 用户代理；若直连失败，先检查 `curl.exe --noproxy '*' https://api.deepseek.com` 和本机网络。
+- 临时调并发：`pipeline --model deepseek-v4-flash --max-workers 2`
 
 ### 症状：NTQQ 升级后字段抽不全
 NTQQ 跨版本字段号会变。重新校准：

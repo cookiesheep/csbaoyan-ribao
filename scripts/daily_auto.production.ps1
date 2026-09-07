@@ -7,8 +7,14 @@
   否则会把残缺消息误报成完整日报。
 .PARAMETER Date
   目标日报日期 YYYY-MM-DD，默认使用机器本地时间的昨天。
+.PARAMETER UseExistingDatabase
+  仅供人工补历史数据：跳过进程内存解密，明确复用现有 nt_msg.db。
+  计划任务绝不能传此参数；使用前必须确认数据库来自最近一次成功解密。
 #>
-param([string]$Date)
+param(
+    [string]$Date,
+    [switch]$UseExistingDatabase
+)
 
 $ErrorActionPreference = "Stop"
 $logDir = "D:\code\csbaoyan\logs"
@@ -32,13 +38,28 @@ $env:PYTHONPATH = "src"
 $env:PYTHONUNBUFFERED = "1"
 $env:PYTHONIOENCODING = "utf-8"
 
-Logm "step1 decrypt"
-$decryptOutput = & .venv\Scripts\python.exe D:\code\qq_dump_db\dump_qq_key_auto.py --qq 2272735608 2>&1 | Out-String
-$decryptExit = $LASTEXITCODE
-$decryptTail = ($decryptOutput.Trim() -split "`n")[-1]
-Logm ("decrypt_tail: " + $decryptTail)
-if ($decryptExit -ne 0) {
-    Fail "DECRYPT_FAILED (exit=$decryptExit): QQ 必须保持登录运行；已停止，未使用旧数据库生成日报。"
+$modelLine = Get-Content -LiteralPath ".env" | Where-Object { $_ -match "^OPENAI_MODEL=" } | Select-Object -Last 1
+$configuredModel = ($modelLine -replace "^OPENAI_MODEL=", "").Trim()
+if ($configuredModel -in @("deepseek-chat", "deepseek-reasoner")) {
+    Fail "MODEL_CONFIG_INVALID: DeepSeek 旧模型 $configuredModel 已停用，请改为 deepseek-v4-flash 或 deepseek-v4-pro。"
+}
+
+if ($UseExistingDatabase) {
+    $existingDb = "D:\code\qq_dump_db\output\2272735608\nt_msg.db"
+    if (-not (Test-Path -LiteralPath $existingDb)) {
+        Fail "EXISTING_DB_NOT_FOUND: $existingDb"
+    }
+    $dbTime = (Get-Item -LiteralPath $existingDb).LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss")
+    Logm "step1 decrypt SKIPPED_BY_OPERATOR existing_db=$existingDb last_write=$dbTime"
+} else {
+    Logm "step1 decrypt"
+    $decryptOutput = & .venv\Scripts\python.exe D:\code\qq_dump_db\dump_qq_key_auto.py --qq 2272735608 2>&1 | Out-String
+    $decryptExit = $LASTEXITCODE
+    $decryptTail = ($decryptOutput.Trim() -split "`n")[-1]
+    Logm ("decrypt_tail: " + $decryptTail)
+    if ($decryptExit -ne 0) {
+        Fail "DECRYPT_FAILED (exit=$decryptExit): QQ 必须保持登录运行；已停止，未使用旧数据库生成日报。"
+    }
 }
 
 Logm "step1b ingest (DB -> QCE JSON)"

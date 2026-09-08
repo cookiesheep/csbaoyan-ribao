@@ -106,7 +106,7 @@ Logm ("ingest_tail: " + ($ingestOutput.Trim() -split "`n")[-1])
 if ($ingestExit -ne 0) { Fail "INGEST_FAILED (exit=$ingestExit)" }
 
 Logm "step2 validate handoff payload"
-$exportFile = Get-ChildItem -LiteralPath "chat_exports" -File -Filter "$Date`T*.json" |
+$exportFile = Get-ChildItem -LiteralPath "D:\code\csbaoyan\chat_exports" -File -Filter "$Date`T*.json" |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if (-not $exportFile) { Fail "NO_QCE_EXPORT: 未找到 $Date 的 QCE JSON" }
 try {

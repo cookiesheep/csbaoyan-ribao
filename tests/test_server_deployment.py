@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_edge_collector_never_runs_llm_pipeline() -> None:
     script = (ROOT / "scripts" / "daily_auto.production.ps1").read_text(encoding="utf-8-sig")
     assert "edge_python_bootstrap.py\" ingest --date $Date" in script
+    assert 'Get-ChildItem -LiteralPath "D:\\code\\csbaoyan\\chat_exports"' in script
     assert "csbaoyan_daily.cli pipeline" not in script
     assert "Tedge.json.part" in script
     assert "HANDOFF_COMPLETE" in script

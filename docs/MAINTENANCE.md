@@ -190,6 +190,8 @@ curl -I https://csbaoyan.cn/             # ⑥ 外网可达？
 3. 看 `D:\code\csbaoyan\logs\daily_<日期>.txt`：解密是否 18 OK、pipeline 是否完成、scp 是否 exit=0
 4. 若「未找到日期的导出文件」→ 那天 QQ 没同步到消息（机器关过？），QQ 登录拉一下离线消息后补跑
 
+生产脚本检测不到 `QQ.exe` 时，会先通过公共桌面或开始菜单快捷方式自动启动 QQ，等待登录和消息同步后再解密。该机制依赖 Windows 用户已经登录且 QQ 保存了登录状态；若自动登录失效，任务仍会安全失败并在日志写入 `QQ_AUTO_START_FAILED` 或 `DECRYPT_FAILED`，不会复用旧数据库。
+
 ### 症状：DeepSeek 报错（生成失败）
 - 当前模型名使用 `deepseek-v4-flash` 或 `deepseek-v4-pro`；`deepseek-chat` / `deepseek-reasoner` 已停用，生产脚本会在调用前给出 `MODEL_CONFIG_INVALID`。
 - `.env` 的 `OPENAI_API_KEY` 是主 Key；可选 `OPENAI_FALLBACK_API_KEY` 仅在主 Key 明确返回余额/配额不足时启用。普通超时、网络错误、429 限流不会切换，避免双 Key 重复消耗。

@@ -32,6 +32,33 @@ function Fail($message) {
     exit 1
 }
 
+function Ensure-QqRunning {
+    if (@(Get-Process -Name "QQ" -ErrorAction SilentlyContinue).Count -gt 0) {
+        return
+    }
+
+    $qqShortcuts = @(
+        "C:\Users\Public\Desktop\QQ.lnk",
+        (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\腾讯软件\QQ\QQ.lnk")
+    )
+    $qqShortcut = $qqShortcuts | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+    if (-not $qqShortcut) {
+        Fail "QQ_NOT_RUNNING: 未找到 QQ 进程或启动快捷方式，请登录 Windows 后手动启动 QQ。"
+    }
+
+    Logm "QQ_NOT_RUNNING: attempting auto-start via $qqShortcut"
+    Start-Process -FilePath $qqShortcut
+    for ($attempt = 0; $attempt -lt 30; $attempt += 1) {
+        Start-Sleep -Seconds 2
+        if (@(Get-Process -Name "QQ" -ErrorAction SilentlyContinue).Count -gt 0) {
+            Logm "QQ_STARTED: waiting 20 seconds for login and message sync"
+            Start-Sleep -Seconds 20
+            return
+        }
+    }
+    Fail "QQ_AUTO_START_FAILED: 已尝试启动 QQ，但 60 秒内未检测到进程，请登录 Windows 后检查 QQ。"
+}
+
 Logm "START date=$Date"
 Set-Location D:\code\csbaoyan
 $env:PYTHONPATH = "src"
@@ -52,6 +79,7 @@ if ($UseExistingDatabase) {
     $dbTime = (Get-Item -LiteralPath $existingDb).LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss")
     Logm "step1 decrypt SKIPPED_BY_OPERATOR existing_db=$existingDb last_write=$dbTime"
 } else {
+    Ensure-QqRunning
     Logm "step1 decrypt"
     $decryptOutput = & .venv\Scripts\python.exe D:\code\qq_dump_db\dump_qq_key_auto.py --qq 2272735608 2>&1 | Out-String
     $decryptExit = $LASTEXITCODE

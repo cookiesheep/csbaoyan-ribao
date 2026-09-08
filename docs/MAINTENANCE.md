@@ -50,6 +50,7 @@
 
 ### 3.2 每日自动流程
 - **计划任务 `CsBaoyanDaily`**，每天 **06:30**（北京时间），以 wqf18 身份（密码登录，开机即跑，`-StartWhenAvailable` 错过会补跑）。
+- **计划任务 `CSBaoyan-QQ-Autostart`**，当前用户登录时直接启动 `D:\QQ_data\QQNT\QQ.exe`，让 QQ 生命周期不依赖 SSH 窗口；日报脚本仍保留缺进程时自动拉起的第二道兜底。
 - 执行 `daily_auto.ps1`（默认生成**昨天**的日报）：
   1. `dump_qq_key_auto.py --qq 2272735608` 解密
   2. `cli pipeline --skip-commit --skip-push` 生成日报
@@ -83,6 +84,7 @@ $env:PYTHONPATH="src"
 **查任务状态/日志**：
 ```powershell
 Get-ScheduledTaskInfo -TaskName CsBaoyanDaily   # LastTaskResult=0 即成功
+Get-ScheduledTask -TaskName CSBaoyan-QQ-Autostart  # 正常登录后应为 Running
 Get-Content D:\code\csbaoyan\logs\daily_2026-07-29.txt -Tail 20
 ```
 

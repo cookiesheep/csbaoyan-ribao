@@ -12,7 +12,7 @@ def test_edge_collector_never_runs_llm_pipeline() -> None:
     assert "csbaoyan_daily.cli pipeline" not in script
     assert "Tedge.json.part" in script
     assert "HANDOFF_COMPLETE" in script
-    assert "& cmd.exe /d /c .venv\\Scripts\\python.exe" in script
+    assert "& cmd.exe /d /c D:\\code\\csbaoyan\\.venv\\Scripts\\python.exe" in script
     assert "& .venv\\Scripts\\python.exe" not in script
     assert "& .\\.venv\\Scripts\\python.exe" not in script
 

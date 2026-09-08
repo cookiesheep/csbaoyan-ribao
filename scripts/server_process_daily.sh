@@ -13,7 +13,7 @@ done_file="$handoff_root/processed/${report_date}.sha256"
 log_file="$handoff_root/logs/${report_date}.log"
 
 mkdir -p "$handoff_root/inbox" "$handoff_root/processed" "$handoff_root/logs"
-exec 9>"$handoff_root/process.lock"
+exec 9>"$handoff_root/logs/process.lock"
 flock -n 9 || { echo "another report generation is already running" >&2; exit 75; }
 exec > >(tee -a "$log_file") 2>&1
 
@@ -44,4 +44,3 @@ export PYTHONPATH="$repo_root/src${PYTHONPATH:+:$PYTHONPATH}"
 printf '%s\n' "$input_hash" > "$done_file"
 rm -f -- "$input_file"
 echo "server report generation complete: $report_date"
-

@@ -1,0 +1,10 @@
+[Unit]
+Description=Retry pending csbaoyan edge handoffs
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

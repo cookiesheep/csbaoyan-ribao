@@ -14,9 +14,14 @@ from csbaoyan_daily.app.xhs_export import XhsExportOptions, run_xhs_export
 
 
 class XhsExportTests(unittest.TestCase):
-    def _artifacts(self, repo_root: Path, payload: dict[str, object]) -> GenerateArtifacts:
+    def _artifacts(
+        self,
+        repo_root: Path,
+        payload: dict[str, object],
+        pages_dir: Path | None = None,
+    ) -> GenerateArtifacts:
         report_date = "2026-05-18"
-        report_path = repo_root / "pages" / "data" / "reports" / f"{report_date}.md"
+        report_path = (pages_dir or repo_root / "pages") / "data" / "reports" / f"{report_date}.md"
         report_path.parent.mkdir(parents=True)
         report_path.write_text("# CS保研信息日报\n\n## 今日概览\n\n历史日报正文。\n", encoding="utf-8")
 
@@ -122,6 +127,28 @@ class XhsExportTests(unittest.TestCase):
 
             self.assertEqual(envelope["source"]["group_display"], "")
             self.assertEqual(envelope["source"]["time_range"], {"start": "", "end": ""})
+
+    def test_external_pages_directory_uses_logical_report_path(self) -> None:
+        with tempfile.TemporaryDirectory() as repo_tmp, tempfile.TemporaryDirectory() as pages_tmp:
+            repo_root = Path(repo_tmp)
+            pages_dir = Path(pages_tmp)
+            payload = {
+                "statistics": {"timeRange": {"start": "2026-05-18", "end": "2026-05-18"}},
+                "messages": [],
+            }
+            artifacts = self._artifacts(repo_root, payload, pages_dir=pages_dir)
+
+            output_path = run_xhs_export(
+                XhsExportOptions(
+                    artifacts=artifacts,
+                    pages_dir=pages_dir,
+                    repo_root=repo_root,
+                    enabled=True,
+                )
+            )
+
+            envelope = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(envelope["report_path"], "pages/data/reports/2026-05-18.md")
 
 
 if __name__ == "__main__":

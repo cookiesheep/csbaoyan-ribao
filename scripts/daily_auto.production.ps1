@@ -1,8 +1,9 @@
 <#
 .SYNOPSIS
-  COOKIESHEEP 生产日报任务：解密 QQ 数据、导入前一日群聊、生成日报并上传主站。
+  COOKIESHEEP 边缘采集任务：解密 QQ 数据、导入前一日群聊并可靠移交华为云。
 .DESCRIPTION
-  这是生产机 D:\code\csbaoyan\daily_auto.ps1 的受版本控制副本。
+  这是生产机 D:\code\csbaoyan\daily_auto.ps1 的受版本控制副本。日报生成、
+  小红书素材生成和管理后台已经迁到华为云；本脚本不得恢复本地 LLM 处理。
   关键安全规则：qq_dump_db 非零退出时必须立即停止，绝不能继续读取旧的明文数据库，
   否则会把残缺消息误报成完整日报。
 .PARAMETER Date
@@ -10,17 +11,27 @@
 .PARAMETER UseExistingDatabase
   仅供人工补历史数据：跳过进程内存解密，明确复用现有 nt_msg.db。
   计划任务绝不能传此参数；使用前必须确认数据库来自最近一次成功解密。
+.PARAMETER ForceHandoff
+  忽略本地上传成功标记并重新采集、上传。仅供人工补跑或恢复使用。
 #>
 param(
     [string]$Date,
-    [switch]$UseExistingDatabase
+    [switch]$UseExistingDatabase,
+    [switch]$ForceHandoff
 )
 
 $ErrorActionPreference = "Stop"
 $logDir = "D:\code\csbaoyan\logs"
+$handoffDir = Join-Path $logDir "handoff"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+New-Item -ItemType Directory -Force -Path $handoffDir | Out-Null
 if (-not $Date) { $Date = (Get-Date).AddDays(-1).ToString("yyyy-MM-dd") }
+$parsedDate = [datetime]::MinValue
+if (-not [datetime]::TryParseExact($Date, "yyyy-MM-dd", [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::None, [ref]$parsedDate)) {
+    throw "日期格式无效：$Date"
+}
 $log = "$logDir\daily_$Date.txt"
+$handoffMarker = Join-Path $handoffDir "$Date.json"
 
 function Logm($message) {
     Add-Content -Path $log -Value ("[{0}] {1}" -f (Get-Date -Format "HH:mm:ss"), $message)
@@ -60,16 +71,15 @@ function Ensure-QqRunning {
 }
 
 Logm "START date=$Date"
+if ((Test-Path -LiteralPath $handoffMarker -PathType Leaf) -and -not $ForceHandoff) {
+    Logm "HANDOFF_ALREADY_COMPLETE: $handoffMarker；服务器会自行重试后续生成。人工重传请使用 -ForceHandoff。"
+    Logm "DONE"
+    exit 0
+}
 Set-Location D:\code\csbaoyan
 $env:PYTHONPATH = "src"
 $env:PYTHONUNBUFFERED = "1"
 $env:PYTHONIOENCODING = "utf-8"
-
-$modelLine = Get-Content -LiteralPath ".env" | Where-Object { $_ -match "^OPENAI_MODEL=" } | Select-Object -Last 1
-$configuredModel = ($modelLine -replace "^OPENAI_MODEL=", "").Trim()
-if ($configuredModel -in @("deepseek-chat", "deepseek-reasoner")) {
-    Fail "MODEL_CONFIG_INVALID: DeepSeek 旧模型 $configuredModel 已停用，请改为 deepseek-v4-flash 或 deepseek-v4-pro。"
-}
 
 if ($UseExistingDatabase) {
     $existingDb = "D:\code\qq_dump_db\output\2272735608\nt_msg.db"
@@ -96,21 +106,26 @@ $ingestExit = $LASTEXITCODE
 Logm ("ingest_tail: " + ($ingestOutput.Trim() -split "`n")[-1])
 if ($ingestExit -ne 0) { Fail "INGEST_FAILED (exit=$ingestExit)" }
 
-Logm "step2 pipeline (generate -> verify -> publish)"
-$pipelineOutput = & .venv\Scripts\python.exe -m csbaoyan_daily.cli pipeline --skip-commit --skip-push --date $Date 2>&1 | Out-String
-$pipelineExit = $LASTEXITCODE
-$pipelineText = $pipelineOutput.Trim()
-$pipelineTail = $pipelineText.Substring([Math]::Max(0, $pipelineText.Length - 300))
-Logm ("pipeline_tail: " + $pipelineTail)
-if ($pipelineExit -ne 0) { Fail "PIPELINE_FAILED (exit=$pipelineExit)" }
-
-$report = "pages\data\reports\$Date.md"
-if (-not (Test-Path -LiteralPath $report)) {
-    Fail "NO_REPORT for $Date (pipeline produced no report)"
+Logm "step2 validate handoff payload"
+$exportFile = Get-ChildItem -LiteralPath "chat_exports" -File -Filter "$Date`T*.json" |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+if (-not $exportFile) { Fail "NO_QCE_EXPORT: 未找到 $Date 的 QCE JSON" }
+try {
+    $payload = Get-Content -LiteralPath $exportFile.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
+    $messageCount = @($payload.messages).Count
+    if ($messageCount -lt 1) { throw "messages 为空" }
+    if (-not $payload.statistics.timeRange) { throw "缺少 statistics.timeRange" }
 }
+catch {
+    Fail "QCE_VALIDATION_FAILED: $($_.Exception.Message)"
+}
+$payloadHash = (Get-FileHash -LiteralPath $exportFile.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+Logm "handoff_payload file=$($exportFile.Name) messages=$messageCount sha256=$payloadHash"
+if ($messageCount -lt 20) { Logm "QCE_SUSPICIOUS_LOW_COUNT: only $messageCount messages; server admin will warn before publishing" }
 
-Logm "step3 upload (scp to server)"
+Logm "step3 atomic handoff to Huawei cloud"
 $scp = "C:\Windows\System32\OpenSSH\scp.exe"
+$ssh = "C:\Windows\System32\OpenSSH\ssh.exe"
 $scpOptions = @(
     "-i", "C:\Users\wqf18\.ssh\csbaoyan_upload_key",
     "-o", "BatchMode=yes",
@@ -118,14 +133,35 @@ $scpOptions = @(
     "-o", "UserKnownHostsFile=C:\Users\wqf18\.ssh\known_hosts",
     "-P", "6543"
 )
-$reportUpload = (& $scp @scpOptions $report "root@122.9.99.104:/var/www/csbaoyan/data/reports/" 2>&1 | Out-String)
-$reportUploadExit = $LASTEXITCODE
-Logm ("scp_report exit=" + $reportUploadExit + " err=" + $reportUpload.Trim())
-if ($reportUploadExit -ne 0) { Fail "REPORT_UPLOAD_FAILED (exit=$reportUploadExit)" }
+$remotePart = "/srv/csbaoyan-daily/inbox/$Date`Tedge.json.part"
+$remoteReady = "/srv/csbaoyan-daily/inbox/$Date`Tedge.json"
+$uploadOutput = (& $scp @scpOptions $exportFile.FullName "root@122.9.99.104:$remotePart" 2>&1 | Out-String)
+$uploadExit = $LASTEXITCODE
+Logm ("scp_qce exit=" + $uploadExit + " err=" + $uploadOutput.Trim())
+if ($uploadExit -ne 0) { Fail "QCE_UPLOAD_FAILED (exit=$uploadExit)" }
 
-$manifestUpload = (& $scp @scpOptions "pages\data\reports.json" "root@122.9.99.104:/var/www/csbaoyan/data/" 2>&1 | Out-String)
-$manifestUploadExit = $LASTEXITCODE
-Logm ("scp_manifest exit=" + $manifestUploadExit + " err=" + $manifestUpload.Trim())
-if ($manifestUploadExit -ne 0) { Fail "MANIFEST_UPLOAD_FAILED (exit=$manifestUploadExit)" }
+$sshOptions = @(
+    "-i", "C:\Users\wqf18\.ssh\csbaoyan_upload_key",
+    "-o", "BatchMode=yes",
+    "-o", "StrictHostKeyChecking=accept-new",
+    "-o", "UserKnownHostsFile=C:\Users\wqf18\.ssh\known_hosts",
+    "-p", "6543"
+)
+$activateCommand = "chgrp csbaoyan '$remotePart' && chmod 0640 '$remotePart' && mv -f '$remotePart' '$remoteReady' && systemctl start --no-block 'csbaoyan-daily@$Date.service'"
+$activateOutput = (& $ssh @sshOptions "root@122.9.99.104" $activateCommand 2>&1 | Out-String)
+$activateExit = $LASTEXITCODE
+Logm ("activate_remote exit=" + $activateExit + " err=" + $activateOutput.Trim())
+if ($activateExit -ne 0) { Fail "QCE_ACTIVATION_FAILED (exit=$activateExit); uploaded part remains for recovery" }
+
+$marker = [ordered]@{
+    date = $Date
+    uploadedAt = (Get-Date).ToUniversalTime().ToString("o")
+    sourceFile = $exportFile.FullName
+    messageCount = $messageCount
+    sha256 = $payloadHash
+    destination = $remoteReady
+}
+[IO.File]::WriteAllText($handoffMarker, ($marker | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
+Logm "HANDOFF_COMPLETE: server owns report and XHS generation for $Date"
 
 Logm "DONE"

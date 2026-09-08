@@ -1,0 +1,7 @@
+[Unit]
+Description=Reconcile pending csbaoyan edge handoffs
+
+[Service]
+Type=oneshot
+ExecStart=/opt/csbaoyan-daily/scripts/server_reconcile.sh
+

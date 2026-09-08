@@ -60,6 +60,17 @@ def _resolve_from_repo(path: Path, repo_root: Path) -> Path:
     return path.resolve() if path.is_absolute() else (repo_root / path).resolve()
 
 
+def _portable_report_path(report_path: Path, repo_root: Path, pages_dir: Path) -> str:
+    """Return a stable logical path when production pages live outside the checkout."""
+    try:
+        return report_path.relative_to(repo_root).as_posix()
+    except ValueError:
+        try:
+            return (Path("pages") / report_path.relative_to(pages_dir)).as_posix()
+        except ValueError:
+            return report_path.name
+
+
 def run_xhs_export(options: XhsExportOptions) -> Path | None:
     if not options.enabled:
         return None
@@ -74,7 +85,7 @@ def run_xhs_export(options: XhsExportOptions) -> Path | None:
         raise ValueError(f"日报正文为空，无法生成小红书导出：{report_path}")
 
     payload = load_chat_export(export_file)
-    relative_report_path = report_path.relative_to(repo_root).as_posix()
+    relative_report_path = _portable_report_path(report_path, repo_root, pages_dir)
     envelope = {
         "schema": SCHEMA_VERSION,
         "date": options.artifacts.report_date,

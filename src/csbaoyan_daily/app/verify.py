@@ -18,6 +18,10 @@ RISKY_WORD_PATTERN = re.compile(r"避雷|坑导|黑奴|高压|恶心|压榨")
 
 def scan_text(path: Path, text: str, repo_root: Path) -> list[str]:
     issues: list[str] = []
+    try:
+        display_path = path.relative_to(repo_root)
+    except ValueError:
+        display_path = path
     checks = [
         (EMAIL_PATTERN, "contains an email address"),
         (URL_PATTERN, "contains a URL or homepage"),
@@ -29,7 +33,7 @@ def scan_text(path: Path, text: str, repo_root: Path) -> list[str]:
     for pattern, label in checks:
         match = pattern.search(text)
         if match:
-            issues.append(f"{path.relative_to(repo_root)}: {label}: {match.group(0)}")
+            issues.append(f"{display_path}: {label}: {match.group(0)}")
     return issues
 
 

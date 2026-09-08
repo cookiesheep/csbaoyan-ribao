@@ -1,30 +1,30 @@
 # 运维手册 · Maintenance & Operations
 
-> 三机协同部署的完整运维参考。本手册既记录**当前实例**的真实配置（便于直接操作），也给出**通用步骤**（便于迁移/重建）。
+> 边缘采集 + 云端处理部署的完整运维参考。当前拓扑已于 **2026-09-08** 实跑迁移；旧的“台式机生成一切”流程已停用。
 
 ---
 
 ## 1. 架构总览
 
 ```
-┌──────────────────────────────────┐    ┌──────────────────────────────────┐
-│ ① 数据源：Windows 台式机           │    │ ② 托管：Linux 服务器              │
-│   COOKIESHEEP (局域网)            │    │   byocc (华为云 122.9.99.104)     │
-│   - NTQQ 桌面端（QQ 2272735608）  │    │   - 静态站 /var/www/csbaoyan       │
-│   - 项目 D:\code\csbaoyan         │ ─▶ │   - python http.server :3002       │
-│   - qq_dump_db D:\code\qq_dump_db │scp │   - systemd: csbaoyan-web           │
-│   - 计划任务 CsBaoyanDaily 06:30  │    │                                    │
-└──────────────────────────────────┘    └──────────────┬───────────────────┘
+┌──────────────────────────────────┐    ┌────────────────────────────────────┐
+│ ① 边缘采集：Windows 台式机         │    │ ② 处理与托管：Linux 服务器           │
+│   COOKIESHEEP (局域网)            │    │   byocc (华为云 122.9.99.104)       │
+│   - NTQQ 桌面端（QQ 2272735608）  │    │   - 日报 worker + DeepSeek          │
+│   - qq_dump_db + ingest           │ ─▶ │   - XHS JSON + 多图素材生成          │
+│   - 计划任务 CsBaoyanDaily 06:30  │scp │   - 静态站 127.0.0.1:8765           │
+│   - 不运行 LLM、渲染和管理后台      │    │   - 管理后台 127.0.0.1:14310         │
+└──────────────────────────────────┘    └──────────────┬─────────────────────┘
                                                        │
-                                        ┌──────────────▼───────────────────┐
-                                        │ ③ Cloudflare（两个账号！）         │
-                                        │   账号A: byocc.cc + byocc 隧道     │
-                                        │   账号B: csbaoyan.cn + csbaoyan2   │
-                                        │        隧道(3d1a7c6e) → :3002      │
-                                        └───────────────────────────────────┘
+                                        ┌──────────────▼─────────────────────┐
+                                        │ ③ Cloudflare（独立 Tunnel）          │
+                                        │   csbaoyan.cn → :8765               │
+                                        │   admin.csbaoyan.cn → :14310        │
+                                        │   byocc-own 与本项目隔离，禁止改动     │
+                                        └────────────────────────────────────┘
 ```
 
-**数据流**：台式机解密本地 QQ 库 → ingest 抽取消息 → DeepSeek 生成日报 → scp 上传 `.md` 到服务器 → 服务器经 Cloudflare 隧道对外提供 `https://csbaoyan.cn`。
+**数据流**：台式机解密本地 QQ 库 → ingest 抽取 QCE JSON → SSH 原子交接 → 华为云 DeepSeek 生成日报/XHS JSON → 云端确定性渲染素材 → 静态站与管理后台分别经独立 Cloudflare Tunnel 提供服务。
 
 ---
 
@@ -32,8 +32,8 @@
 
 | 角色 | 主机 | 访问方式 | 关键路径/服务 |
 |------|------|----------|---------------|
-| 数据源 | 台式机 COOKIESHEEP | `ssh desktop`（端口 2222，用户 wqf18） | `D:\code\csbaoyan`、`D:\code\qq_dump_db`、计划任务 `CsBaoyanDaily` |
-| 托管 | 华为云 byocc | `ssh byocc`（root@122.9.99.104:6543） | `/var/www/csbaoyan`、systemd `csbaoyan-web` + `cloudflared-csbaoyan` |
+| 数据源 | 台式机 COOKIESHEEP | `ssh desktop`（用户 wqf18；Codex 使用专用密钥） | `D:\code\csbaoyan`、`D:\code\qq_dump_db`、`CsBaoyanDaily`、`CSBaoyan-QQ-Autostart` |
+| 处理与托管 | 华为云 byocc | `ssh byocc`（root@122.9.99.104:6543） | `/opt/csbaoyan-daily`、`/opt/xhs-pack-generator`、`/srv/*`、`/var/www/csbaoyan`、相关 systemd 单元 |
 | DNS/隧道 | Cloudflare | 浏览器 | 账号B：csbaoyan.cn；隧道 csbaoyan2（UUID `3d1a7c6e-8ec4-4f0a-bd24-4f90be115477`） |
 
 > ⚠️ **两个 Cloudflare 账号**是历史原因（byocc.cc 在账号A，csbaoyan.cn 在账号B）。隧道与域名**必须在同一账号**，否则报 1033。当前 csbaoyan 隧道已正确建在账号B。
@@ -51,15 +51,16 @@
 ### 3.2 每日自动流程
 - **计划任务 `CsBaoyanDaily`**，每天 **06:30**（北京时间），以 wqf18 身份（密码登录，开机即跑，`-StartWhenAvailable` 错过会补跑）。
 - **计划任务 `CSBaoyan-QQ-Autostart`**，当前用户登录时直接启动 `D:\QQ_data\QQNT\QQ.exe`，让 QQ 生命周期不依赖 SSH 窗口；日报脚本仍保留缺进程时自动拉起的第二道兜底。
-- 执行 `daily_auto.ps1`（默认生成**昨天**的日报）：
+- 执行 `daily_auto.ps1`（默认采集**昨天**）：
   1. `dump_qq_key_auto.py --qq 2272735608` 解密
-  2. `cli pipeline --skip-commit --skip-push` 生成日报
-  3. `scp` 上传 `<日期>.md` + `reports.json` 到服务器
+  2. `edge_python_bootstrap.py ingest` 生成并校验 QCE JSON
+  3. 上传为 `/srv/csbaoyan-daily/inbox/<日期>Tedge.json.part`，再原子改名
+  4. 触发 `csbaoyan-daily@<日期>.service`；台式机写入 `logs\handoff\<日期>.json` 后退出
 
 ### 3.3 前置依赖（必须满足）
 - **QQ 桌面端保持登录运行**（解密要读 `QQ.exe` 进程内存提密钥）。建议设 QQ 开机自启。
 - 台式机开机 / 未休眠（06:30 能触发）。
-- 能访问 DeepSeek API（出报用）与服务器 6543 端口（上传用）。
+- 能访问服务器 6543 端口（上传用）。DeepSeek 已由华为云调用，台式机不再承担 LLM 和卡片渲染。
 
 ### 3.4 常用操作
 
@@ -74,11 +75,10 @@ powershell -ExecutionPolicy Bypass -File D:\code\csbaoyan\daily_auto.ps1 -Date 2
 ```
 `-UseExistingDatabase` 只用于人工历史补数，计划任务不得配置该参数。日志会记录数据库路径和最后修改时间，避免悄悄使用陈旧数据。
 
-**只重新生成不重新解密**（密钥没变、库已解密）：
+**明确复用已确认新鲜的数据库并强制重新交接**：
 ```powershell
-cd D:\code\csbaoyan
-$env:PYTHONPATH="src"
-.venv\Scripts\python.exe -m csbaoyan_daily.cli pipeline --skip-commit --skip-push --date 2026-07-30
+powershell -ExecutionPolicy Bypass -File D:\code\csbaoyan\daily_auto.ps1 `
+  -Date 2026-07-30 -UseExistingDatabase -ForceHandoff
 ```
 
 **查任务状态/日志**：
@@ -103,11 +103,16 @@ Get-Content D:\code\csbaoyan\logs\daily_2026-07-29.txt -Tail 20
 ### 4.1 服务清单
 | systemd 服务 | 作用 | 端口 |
 |--------------|------|------|
-| `csbaoyan-web` | 静态站（python http.server） | 127.0.0.1:3002 |
+| `csbaoyan-web` | 静态站（python http.server） | 127.0.0.1:8765 |
 | `cloudflared-csbaoyan` | Cloudflare 隧道（csbaoyan2） | 出站 |
+| `csbaoyan-daily@<date>` | 按日期生成日报与 XHS JSON，成功后触发素材同步 | oneshot |
+| `csbaoyan-reconcile.timer` | 每 15 分钟重试 inbox 未处理交接 | timer |
+| `xhs-pack-sync.service` / `.timer` | 生成素材包；事件触发 + 每 15 分钟兜底 | oneshot/timer |
+| `xhs-pack-admin` | 素材管理后台 | 127.0.0.1:14310 |
+| `cloudflared-csbaoyan-admin` | admin.csbaoyan.cn 独立 Tunnel | 出站；metrics 127.0.0.1:20244 |
 | `cloudflared`（byocc，账号A） | byocc.cc 隧道 | 出站 |
 
-> ⚠️ `cloudflared`（byocc）是**你的另一个生产服务**，勿碰。
+> ⚠️ `cloudflared-byocc-own`（byocc.cc）是**另一个生产服务**，本次迁移没有改它。不要为了修 csbaoyan 重启或修改它。
 
 ### 4.2 常用操作（在服务器上，root）
 
@@ -115,7 +120,15 @@ Get-Content D:\code\csbaoyan\logs\daily_2026-07-29.txt -Tail 20
 
 **重启 csbaoyan 隧道**：`systemctl restart cloudflared-csbaoyan`
 
-**本地验证静态站**：`curl -I http://127.0.0.1:3002/`（应 200）
+**本地验证静态站**：`curl -I http://127.0.0.1:8765/`（应 200）
+
+**检查完整云端链路**：
+```bash
+systemctl is-active csbaoyan-web cloudflared-csbaoyan xhs-pack-admin \
+  cloudflared-csbaoyan-admin xhs-pack-sync.timer csbaoyan-reconcile.timer
+journalctl -u 'csbaoyan-daily@2026-09-07.service' -n 80 --no-pager
+journalctl -u xhs-pack-sync.service -n 80 --no-pager
+```
 
 **隧道连接状态**：
 ```bash
@@ -126,7 +139,11 @@ cloudflared tunnel info 3d1a7c6e-8ec4-4f0a-bd24-4f90be115477   # 看 CONNECTIONS
 
 ### 4.3 配置文件位置
 - 隧道配置：`/root/.cloudflared/csbaoyan-config.yml`（含 `protocol: http2`，必须！否则 QUIC 在某些网络下连不上）
-- 网站根目录：`/var/www/csbaoyan/`（前端 `index.html`/`app.js` + `data/reports/`）
+- 网站根目录：`/var/www/csbaoyan/`（`data/reports` + `data/xhs` 由 `csbaoyan` 服务账户写入）
+- 日报发行版：`/opt/csbaoyan-daily-releases/<commit>`，当前版本软链接 `/opt/csbaoyan-daily`
+- 素材发行版：`/opt/xhs-pack-generator-releases/<commit>`，当前版本软链接 `/opt/xhs-pack-generator`
+- 运行数据：`/srv/csbaoyan-daily`、`/srv/xhs-pack-generator/packs`
+- 私密环境：`/etc/csbaoyan/csbaoyan.env`、`xhs.env`、`cloudflared-admin.env`（root:csbaoyan 0640）
 - 证书：`/root/.cloudflared/cert.pem`（账号A，byocc 管理用）；账号B 证书备份 `certB.pem`
 
 ### 4.4 手动放一份报告到服务器（不走台式机）
@@ -165,7 +182,7 @@ scp -i C:\Users\wqf18\.ssh\csbaoyan_upload_key -P 6543 pages\data\reports\2026-0
 每天/每周瞄一眼即可：
 - [ ] 打开 `https://csbaoyan.cn`，首页正常、有最新日报
 - [ ] 台式机：QQ 在线、任务 `CsBaoyanDaily` 昨天结果=0
-- [ ] 服务器：`systemctl is-active csbaoyan-web cloudflared-csbaoyan` 都 active
+- [ ] 服务器：`csbaoyan-web`、`cloudflared-csbaoyan`、`xhs-pack-admin`、`cloudflared-csbaoyan-admin`、两项 timer 均 active
 - [ ] DeepSeek 余额充足（出报消耗 token）
 
 ---
@@ -175,7 +192,7 @@ scp -i C:\Users\wqf18\.ssh\csbaoyan_upload_key -P 6543 pages\data\reports\2026-0
 ### 症状：网站打不开 / 502 / 530 / 1033
 按层从下往上查（在服务器上）：
 ```bash
-curl -I http://127.0.0.1:3002/          # ① 静态站活着？(应200)
+curl -I http://127.0.0.1:8765/          # ① 静态站活着？(应200)
 systemctl is-active csbaoyan-web        # ② 服务在跑？
 cloudflared tunnel info 3d1a7c6e-8ec4-4f0a-bd24-4f90be115477  # ③ 隧道有连接？
 systemctl is-active cloudflared-csbaoyan # ④ 隧道服务在跑？
@@ -189,16 +206,18 @@ curl -I https://csbaoyan.cn/             # ⑥ 外网可达？
 ### 症状：今天的日报没更新
 1. 台式机 QQ 是否在线？（解密依赖）
 2. `Get-ScheduledTaskInfo CsBaoyanDaily` 的 `LastTaskResult` 是否 0
-3. 看 `D:\code\csbaoyan\logs\daily_<日期>.txt`：解密是否 18 OK、pipeline 是否完成、scp 是否 exit=0
+3. 看 `D:\code\csbaoyan\logs\daily_<日期>.txt`：解密/ingest 是否成功、消息数是否合理、是否出现 `HANDOFF_COMPLETE`
 4. 若「未找到日期的导出文件」→ 那天 QQ 没同步到消息（机器关过？），QQ 登录拉一下离线消息后补跑
+5. 若已经 `HANDOFF_COMPLETE`，转到服务器检查 `csbaoyan-daily@<日期>.service` 和 `/srv/csbaoyan-daily/logs/<日期>.log`
+6. 若日报/XHS JSON 已生成但素材没出现，检查 `xhs-pack-sync.service`；timer 会每 15 分钟幂等重试
 
 生产脚本检测不到 `QQ.exe` 时，会先通过公共桌面或开始菜单快捷方式自动启动 QQ，等待登录和消息同步后再解密。该机制依赖 Windows 用户已经登录且 QQ 保存了登录状态；若自动登录失效，任务仍会安全失败并在日志写入 `QQ_AUTO_START_FAILED` 或 `DECRYPT_FAILED`，不会复用旧数据库。
 
-### 症状：DeepSeek 报错（生成失败）
+### 症状：DeepSeek 报错（云端生成失败）
 - 当前模型名使用 `deepseek-v4-flash` 或 `deepseek-v4-pro`；`deepseek-chat` / `deepseek-reasoner` 已停用，生产脚本会在调用前给出 `MODEL_CONFIG_INVALID`。
-- `.env` 的 `OPENAI_API_KEY` 是主 Key；可选 `OPENAI_FALLBACK_API_KEY` 仅在主 Key 明确返回余额/配额不足时启用。普通超时、网络错误、429 限流不会切换，避免双 Key 重复消耗。
-- 客户端对 DeepSeek 采用直连，不继承 Windows 用户代理；若直连失败，先检查 `curl.exe --noproxy '*' https://api.deepseek.com` 和本机网络。
-- 临时调并发：`pipeline --model deepseek-v4-flash --max-workers 2`
+- `/etc/csbaoyan/csbaoyan.env` 与 `/etc/csbaoyan/xhs.env` 各自配置主/备用 Key，权限必须保持 `root:csbaoyan 0640`；普通超时、网络错误、429 不切换备用 Key。
+- 看 `journalctl -u csbaoyan-daily@<日期>` 判断日报阶段；看 `/srv/xhs-pack-generator/logs` 判断文案/卡片阶段。不要输出 EnvironmentFile 内容。
+- 云端采用直连 DeepSeek；临时降低日报并发应通过服务环境/命令参数完成，修改后记录并恢复。
 
 ### 症状：NTQQ 升级后字段抽不全
 NTQQ 跨版本字段号会变。重新校准：
@@ -215,12 +234,12 @@ NTQQ 跨版本字段号会变。重新校准：
 1. **QQ 号 + 群 code**：2272735608 / 943826679（记在 `.env`）
 2. **服务器隧道凭证**：`/root/.cloudflared/3d1a7c6e-*.json`（丢了就得在账号B重建隧道）
 
-**日报本身**：`pages/data/reports/*.md` 在台式机和服务器各一份，天然双备份；可定期 git 提交做第三份。
+**日报和素材**：服务器 `/var/www/csbaoyan/data/reports`、`/var/www/csbaoyan/data/xhs`、`/srv/xhs-pack-generator/packs` 是当前真相源。台式机保留迁移时快照，但迁移后的新内容不会自动回写台式机。
 
 **重建最小集**（灾难恢复）：
 1. 新 Windows 机：装 NTQQ + 登录 QQ → 部署项目 + qq_dump_db → `.env` → `ingest --inspect` 校准 → 计划任务
-2. 服务器：`pages/` 进 `/var/www/csbaoyan` → 起 `csbaoyan-web` → 账号B建隧道 → CNAME
-3. 台式机→服务器 SSH 密钥
+2. 服务器：部署两个 commit 发行版与 venv/node_modules → 恢复 `/var/www/csbaoyan`、`/srv/xhs-pack-generator/packs`、`/etc/csbaoyan/*.env` → 启动本文 4.1 的全部 csbaoyan 单元
+3. 恢复台式机→服务器 SSH 密钥和 `/srv/csbaoyan-daily/inbox` 写入权限
 
 ---
 
@@ -229,3 +248,14 @@ NTQQ 跨版本字段号会变。重新校准：
 - [ ] 台式机 SSH 密码、服务器 root 强密码 / 改密钥登录
 - [ ] `csbaoyan_upload_key` 仅用于上传，权限 600
 - [ ] 解密产物 `output/<QQ>/nt_msg.db` 含明文聊天，勿提交 git、勿外传（`.gitignore` 已含 `chat_exports/`）
+- [ ] QCE 交接文件含一天的原始群聊，仅经 SSH 传输，服务成功后删除；服务器 inbox/日志不得开放给 Web 服务
+
+## 10. 2026-09-08 迁移保护规则
+
+- COOKIESHEEP 只运行 `CsBaoyanDaily` 与 `CSBaoyan-QQ-Autostart`；`CSBaoyan-XHS-Daily`、`CSBaoyan-XHS-Admin`、`CSBaoyan-XHS-Tunnel` 必须保持 Disabled，并确认没有旧的独立 `cloudflared.exe tunnel run` 进程。旧 connector 残留会让 Cloudflare 随机把请求发到已下线的 Windows 源站，表现为间歇或持续 502。
+- 旧脚本备份：`D:\code\csbaoyan\migration-backups\daily_auto.pre-cloud-20260908.ps1`；旧任务 XML：`D:\code\csbaoyan\migration-backups\scheduled-tasks-20260908`。
+- 华为云正式目录：`/opt/csbaoyan-daily`、`/opt/xhs-pack-generator`、`/srv/csbaoyan-daily`、`/srv/xhs-pack-generator`、`/var/www/csbaoyan`、`/etc/csbaoyan`。
+- `/opt/*` 使用 commit 目录 + 当前软链接发布；升级时构建新目录、验收后原子换软链接，不要原地覆盖当前 release。
+- 当前资源上限：日报 worker 4G/400% CPU，素材 sync 2G/400%，后台 1G/200%，admin Tunnel 256M/50%。不得删除这些边界。
+- `server_process_daily.sh` 按输入 SHA 幂等；成功才写 `processed/<date>.sha256` 并删除 inbox。`run-linux-sync.sh` 自带 flock，Pack 层还按 source hash/prompt/schema 幂等。
+- 详细的全服务器保护清单和回滚顺序以 `D:\code\服务器运维总览.md` 第 10 节为准。

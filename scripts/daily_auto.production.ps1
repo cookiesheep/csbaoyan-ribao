@@ -77,7 +77,7 @@ if ((Test-Path -LiteralPath $handoffMarker -PathType Leaf) -and -not $ForceHando
     exit 0
 }
 Set-Location D:\code\csbaoyan
-$env:PYTHONPATH = "src"
+$env:PYTHONPATH = "D:\code\csbaoyan\src"
 $env:PYTHONUNBUFFERED = "1"
 $env:PYTHONIOENCODING = "utf-8"
 

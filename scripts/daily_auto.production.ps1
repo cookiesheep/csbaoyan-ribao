@@ -77,7 +77,7 @@ if ((Test-Path -LiteralPath $handoffMarker -PathType Leaf) -and -not $ForceHando
     exit 0
 }
 Set-Location D:\code\csbaoyan
-$env:PYTHONPATH = "D:\code\csbaoyan\src"
+$env:PYTHONPATH = "D:\code\csbaoyan\src;D:\code\csbaoyan\.venv\Lib\site-packages"
 $env:PYTHONUNBUFFERED = "1"
 $env:PYTHONIOENCODING = "utf-8"
 
@@ -91,7 +91,7 @@ if ($UseExistingDatabase) {
 } else {
     Ensure-QqRunning
     Logm "step1 decrypt"
-    $decryptOutput = & cmd.exe /d /c D:\code\csbaoyan\.venv\Scripts\python.exe D:\code\qq_dump_db\dump_qq_key_auto.py --qq 2272735608 2>&1 | Out-String
+    $decryptOutput = & C:\Users\wqf18\miniconda3\python.exe D:\code\qq_dump_db\dump_qq_key_auto.py --qq 2272735608 2>&1 | Out-String
     $decryptExit = $LASTEXITCODE
     $decryptTail = ($decryptOutput.Trim() -split "`n")[-1]
     Logm ("decrypt_tail: " + $decryptTail)
@@ -101,7 +101,7 @@ if ($UseExistingDatabase) {
 }
 
 Logm "step1b ingest (DB -> QCE JSON)"
-$ingestOutput = & cmd.exe /d /c D:\code\csbaoyan\.venv\Scripts\python.exe -m csbaoyan_daily.cli ingest --date $Date 2>&1 | Out-String
+$ingestOutput = & C:\Users\wqf18\miniconda3\python.exe -m csbaoyan_daily.cli ingest --date $Date 2>&1 | Out-String
 $ingestExit = $LASTEXITCODE
 Logm ("ingest_tail: " + ($ingestOutput.Trim() -split "`n")[-1])
 if ($ingestExit -ne 0) { Fail "INGEST_FAILED (exit=$ingestExit)" }

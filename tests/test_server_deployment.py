@@ -12,8 +12,8 @@ def test_edge_collector_never_runs_llm_pipeline() -> None:
     assert "csbaoyan_daily.cli pipeline" not in script
     assert "Tedge.json.part" in script
     assert "HANDOFF_COMPLETE" in script
-    assert "& cmd.exe /d /c D:\\code\\csbaoyan\\.venv\\Scripts\\python.exe" in script
-    assert '$env:PYTHONPATH = "D:\\code\\csbaoyan\\src"' in script
+    assert "& C:\\Users\\wqf18\\miniconda3\\python.exe" in script
+    assert '$env:PYTHONPATH = "D:\\code\\csbaoyan\\src;D:\\code\\csbaoyan\\.venv\\Lib\\site-packages"' in script
     assert "& .venv\\Scripts\\python.exe" not in script
     assert "& .\\.venv\\Scripts\\python.exe" not in script
 

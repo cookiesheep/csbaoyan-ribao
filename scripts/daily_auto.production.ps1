@@ -79,8 +79,6 @@ if ((Test-Path -LiteralPath $handoffMarker -PathType Leaf) -and -not $ForceHando
 Set-Location D:\code\csbaoyan
 $env:PYTHONUNBUFFERED = "1"
 $env:PYTHONIOENCODING = "utf-8"
-$python = "C:\Users\wqf18\miniconda3\python.exe"
-$bootstrap = "D:\code\csbaoyan\scripts\edge_python_bootstrap.py"
 
 if ($UseExistingDatabase) {
     $existingDb = "D:\code\qq_dump_db\output\2272735608\nt_msg.db"
@@ -92,7 +90,7 @@ if ($UseExistingDatabase) {
 } else {
     Ensure-QqRunning
     Logm "step1 decrypt"
-    $decryptOutput = & $python $bootstrap --script D:\code\qq_dump_db\dump_qq_key_auto.py --qq 2272735608 2>&1 | Out-String
+    $decryptOutput = & "C:\Users\wqf18\miniconda3\python.exe" "D:\code\csbaoyan\scripts\edge_python_bootstrap.py" --script D:\code\qq_dump_db\dump_qq_key_auto.py --qq 2272735608 2>&1 | Out-String
     $decryptExit = $LASTEXITCODE
     $decryptTail = ($decryptOutput.Trim() -split "`n")[-1]
     Logm ("decrypt_tail: " + $decryptTail)
@@ -102,7 +100,7 @@ if ($UseExistingDatabase) {
 }
 
 Logm "step1b ingest (DB -> QCE JSON)"
-$ingestOutput = & $python $bootstrap ingest --date $Date 2>&1 | Out-String
+$ingestOutput = & "C:\Users\wqf18\miniconda3\python.exe" "D:\code\csbaoyan\scripts\edge_python_bootstrap.py" ingest --date $Date 2>&1 | Out-String
 $ingestExit = $LASTEXITCODE
 Logm ("ingest_tail: " + ($ingestOutput.Trim() -split "`n")[-1])
 if ($ingestExit -ne 0) { Fail "INGEST_FAILED (exit=$ingestExit)" }

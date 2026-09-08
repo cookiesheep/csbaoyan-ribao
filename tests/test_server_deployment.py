@@ -10,13 +10,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_edge_collector_never_runs_llm_pipeline() -> None:
     script = (ROOT / "scripts" / "daily_auto.production.ps1").read_text(encoding="utf-8-sig")
-    assert "$bootstrap ingest --date $Date" in script
+    assert "edge_python_bootstrap.py\" ingest --date $Date" in script
     assert "csbaoyan_daily.cli pipeline" not in script
     assert "Tedge.json.part" in script
     assert "HANDOFF_COMPLETE" in script
-    assert "$python = \"C:\\Users\\wqf18\\miniconda3\\python.exe\"" in script
-    assert "$bootstrap = \"D:\\code\\csbaoyan\\scripts\\edge_python_bootstrap.py\"" in script
-    assert "& $python $bootstrap ingest --date $Date" in script
+    assert '& "C:\\Users\\wqf18\\miniconda3\\python.exe" "D:\\code\\csbaoyan\\scripts\\edge_python_bootstrap.py"' in script
     assert "& .venv\\Scripts\\python.exe" not in script
     assert "& .\\.venv\\Scripts\\python.exe" not in script
 

@@ -18,6 +18,15 @@ def test_edge_collector_never_runs_llm_pipeline() -> None:
     assert '& "C:\\Users\\wqf18\\miniconda3\\python.exe" "D:\\code\\csbaoyan\\scripts\\edge_python_bootstrap.py"' in script
     assert "& .venv\\Scripts\\python.exe" not in script
     assert "& .\\.venv\\Scripts\\python.exe" not in script
+    assert "DECRYPT_STALE_OUTPUT" in script
+    assert "LastWriteTimeUtc" in script
+
+
+def test_edge_task_runs_in_the_same_interactive_session_as_qq() -> None:
+    script = (ROOT / "scripts" / "register_edge_task.production.ps1").read_text(encoding="utf-8-sig")
+    assert "-LogonType Interactive" in script
+    assert "daily_auto.ps1" in script
+    assert "-Password" not in script
 
 
 def test_server_pipeline_is_resource_bounded() -> None:

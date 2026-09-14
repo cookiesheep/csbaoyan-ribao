@@ -79,17 +79,18 @@ if ((Test-Path -LiteralPath $handoffMarker -PathType Leaf) -and -not $ForceHando
 Set-Location D:\code\csbaoyan
 $env:PYTHONUNBUFFERED = "1"
 $env:PYTHONIOENCODING = "utf-8"
+$decryptedDb = "D:\code\qq_dump_db\output\2272735608\nt_msg.db"
 
 if ($UseExistingDatabase) {
-    $existingDb = "D:\code\qq_dump_db\output\2272735608\nt_msg.db"
-    if (-not (Test-Path -LiteralPath $existingDb)) {
-        Fail "EXISTING_DB_NOT_FOUND: $existingDb"
+    if (-not (Test-Path -LiteralPath $decryptedDb)) {
+        Fail "EXISTING_DB_NOT_FOUND: $decryptedDb"
     }
-    $dbTime = (Get-Item -LiteralPath $existingDb).LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss")
-    Logm "step1 decrypt SKIPPED_BY_OPERATOR existing_db=$existingDb last_write=$dbTime"
+    $dbTime = (Get-Item -LiteralPath $decryptedDb).LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss")
+    Logm "step1 decrypt SKIPPED_BY_OPERATOR existing_db=$decryptedDb last_write=$dbTime"
 } else {
     Ensure-QqRunning
     Logm "step1 decrypt"
+    $decryptStartedAtUtc = [datetime]::UtcNow
     $decryptOutput = & "C:\Users\wqf18\miniconda3\python.exe" "D:\code\csbaoyan\scripts\edge_python_bootstrap.py" --script D:\code\qq_dump_db\dump_qq_key_auto.py --qq 2272735608 2>&1 | Out-String
     $decryptExit = $LASTEXITCODE
     $decryptTail = ($decryptOutput.Trim() -split "`n")[-1]
@@ -97,6 +98,14 @@ if ($UseExistingDatabase) {
     if ($decryptExit -ne 0) {
         Fail "DECRYPT_FAILED (exit=$decryptExit): QQ 必须保持登录运行；已停止，未使用旧数据库生成日报。"
     }
+    $freshDb = Get-Item -LiteralPath $decryptedDb -ErrorAction SilentlyContinue
+    if (-not $freshDb) {
+        Fail "DECRYPT_OUTPUT_MISSING: 解密命令返回成功，但未生成 $decryptedDb。"
+    }
+    if ($freshDb.Length -lt 1 -or $freshDb.LastWriteTimeUtc -lt $decryptStartedAtUtc.AddSeconds(-2)) {
+        Fail "DECRYPT_STALE_OUTPUT: 解密命令返回成功，但 nt_msg.db 未在本次任务中刷新（last_write=$($freshDb.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss'))）。请确认任务与 QQ 位于同一交互登录会话。"
+    }
+    Logm "decrypt_output_fresh size=$($freshDb.Length) last_write=$($freshDb.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss'))"
 }
 
 Logm "step1b ingest (DB -> QCE JSON)"

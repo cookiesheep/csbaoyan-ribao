@@ -49,10 +49,10 @@
 - 上传密钥：`C:\Users\wqf18\.ssh\csbaoyan_upload_key`（已写入服务器 authorized_keys）
 
 ### 3.2 每日自动流程
-- **计划任务 `CsBaoyanDaily`**，每天 **06:30**（北京时间），以 wqf18 身份（密码登录，开机即跑，`-StartWhenAvailable` 错过会补跑）。
+- **计划任务 `CsBaoyanDaily`**，每天 **06:30**（北京时间），以 wqf18 的 **InteractiveToken** 运行，与 QQ 位于同一登录会话；`-StartWhenAvailable` 会在用户会话可用后补跑。不要改成 Password/S4U/SYSTEM，否则 `qq_dump_db` 可能返回 0 但无法刷新交互会话中的 QQ 数据库。
 - **计划任务 `CSBaoyan-QQ-Autostart`**，当前用户登录时直接启动 `D:\QQ_data\QQNT\QQ.exe`，让 QQ 生命周期不依赖 SSH 窗口；日报脚本仍保留缺进程时自动拉起的第二道兜底。
 - 执行 `daily_auto.ps1`（默认采集**昨天**）：
-  1. `dump_qq_key_auto.py --qq 2272735608` 解密
+  1. `dump_qq_key_auto.py --qq 2272735608` 解密，并校验 `nt_msg.db` 的大小和修改时间确实由本次任务刷新
   2. `edge_python_bootstrap.py ingest` 生成并校验 QCE JSON
   3. 上传为 `/srv/csbaoyan-daily/inbox/<日期>Tedge.json.part`，再原子改名
   4. 触发 `csbaoyan-daily@<日期>.service`；台式机写入 `logs\handoff\<日期>.json` 后退出
@@ -89,6 +89,13 @@ Get-Content D:\code\csbaoyan\logs\daily_2026-07-29.txt -Tail 20
 ```
 
 **手动触发一次任务**：`Start-ScheduledTask -TaskName CsBaoyanDaily`
+
+**重新注册生产任务（必须与 QQ 同一交互会话）**：
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File D:\code\csbaoyan\scripts\register_edge_task.production.ps1
+```
+注册后用 `Get-ScheduledTask CsBaoyanDaily | Select-Object -ExpandProperty Principal` 确认 `LogonType=InteractiveToken`。
 
 ### 3.5 换群 / 换 QQ 号
 改 `D:\code\csbaoyan\.env`：
@@ -207,9 +214,10 @@ curl -I https://csbaoyan.cn/             # ⑥ 外网可达？
 1. 台式机 QQ 是否在线？（解密依赖）
 2. `Get-ScheduledTaskInfo CsBaoyanDaily` 的 `LastTaskResult` 是否 0
 3. 看 `D:\code\csbaoyan\logs\daily_<日期>.txt`：解密/ingest 是否成功、消息数是否合理、是否出现 `HANDOFF_COMPLETE`
-4. 若「未找到日期的导出文件」→ 那天 QQ 没同步到消息（机器关过？），QQ 登录拉一下离线消息后补跑
-5. 若已经 `HANDOFF_COMPLETE`，转到服务器检查 `csbaoyan-daily@<日期>.service` 和 `/srv/csbaoyan-daily/logs/<日期>.log`
-6. 若日报/XHS JSON 已生成但素材没出现，检查 `xhs-pack-sync.service`；timer 会每 15 分钟幂等重试
+4. 若出现 `DECRYPT_STALE_OUTPUT`，说明解密进程退出码虽然为 0，但数据库没有刷新；确认任务是 `InteractiveToken`、QQ 在同一用户会话登录，再手工触发任务
+5. 若「未找到日期的导出文件」→ 那天 QQ 没同步到消息（机器关过？），QQ 登录拉一下离线消息后补跑
+6. 若已经 `HANDOFF_COMPLETE`，转到服务器检查 `csbaoyan-daily@<日期>.service` 和 `/srv/csbaoyan-daily/logs/<日期>.log`
+7. 若日报/XHS JSON 已生成但素材没出现，检查 `xhs-pack-sync.service`；timer 会每 15 分钟幂等重试
 
 生产脚本检测不到 `QQ.exe` 时，会先通过公共桌面或开始菜单快捷方式自动启动 QQ，等待登录和消息同步后再解密。该机制依赖 Windows 用户已经登录且 QQ 保存了登录状态；若自动登录失效，任务仍会安全失败并在日志写入 `QQ_AUTO_START_FAILED` 或 `DECRYPT_FAILED`，不会复用旧数据库。
 
@@ -259,3 +267,11 @@ NTQQ 跨版本字段号会变。重新校准：
 - 当前资源上限：日报 worker 4G/400% CPU，素材 sync 2G/400%，后台 1G/200%，admin Tunnel 256M/50%。不得删除这些边界。
 - `server_process_daily.sh` 按输入 SHA 幂等；成功才写 `processed/<date>.sha256` 并删除 inbox。`run-linux-sync.sh` 自带 flock，Pack 层还按 source hash/prompt/schema 幂等。
 - 详细的全服务器保护清单和回滚顺序以 `D:\code\服务器运维总览.md` 第 10 节为准。
+
+## 11. 2026-09-09 至 09-13 边缘解密假成功事故
+
+- 华为云所有正式服务、timer 和公开入口始终正常；9 月 8 日日报与素材也实际存在。
+- 9 月 9–13 日的 `CsBaoyanDaily` 每天都运行，但当时任务使用 `LogonType=Password`，与交互式 QQ 会话隔离。
+- `dump_qq_key_auto.py` 返回退出码 0，却没有刷新 `D:\code\qq_dump_db\output\2272735608\nt_msg.db`；数据库修改时间一直停在 9 月 8 日，随后 ingest 只能报告“找不到目标日期消息”。
+- 2026-09-14 在交互会话重新解密后，数据库从约 262 MB 更新到 343 MB，9 月 9–13 日 QCE 全部恢复并在华为云生成日报、XHS JSON 和素材包。
+- 永久修复有两层：`daily_auto.ps1` 在解密后验证数据库必须由本次运行刷新；`CsBaoyanDaily` 改为 `InteractiveToken`，确保与 QQ 位于同一登录会话。

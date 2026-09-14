@@ -275,3 +275,4 @@ NTQQ 跨版本字段号会变。重新校准：
 - `dump_qq_key_auto.py` 返回退出码 0，却没有刷新 `D:\code\qq_dump_db\output\2272735608\nt_msg.db`；数据库修改时间一直停在 9 月 8 日，随后 ingest 只能报告“找不到目标日期消息”。
 - 2026-09-14 在交互会话重新解密后，数据库从约 262 MB 更新到 343 MB，9 月 9–13 日 QCE 全部恢复并在华为云生成日报、XHS JSON 和素材包。
 - 永久修复有两层：`daily_auto.ps1` 在解密后验证数据库必须由本次运行刷新；`CsBaoyanDaily` 改为 `InteractiveToken`，确保与 QQ 位于同一登录会话。
+- 生产修复已于 2026-09-14 部署；PowerShell Principal=`Interactive`、任务 XML=`InteractiveToken`，安全手工触发返回 0，下一次运行是 2026-09-15 06:30。部署前脚本和任务 XML 备份在 `D:\code\csbaoyan\migration-backups\edge-session-fix-20260914-181116`。首次完整的无人值守新日期解密仍以 9 月 15 日自然运行结果为准。

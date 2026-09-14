@@ -95,7 +95,7 @@ Get-Content D:\code\csbaoyan\logs\daily_2026-07-29.txt -Tail 20
 powershell -NoProfile -ExecutionPolicy Bypass `
   -File D:\code\csbaoyan\scripts\register_edge_task.production.ps1
 ```
-注册后用 `Get-ScheduledTask CsBaoyanDaily | Select-Object -ExpandProperty Principal` 确认 `LogonType=InteractiveToken`。
+注册后用 `Get-ScheduledTask CsBaoyanDaily | Select-Object -ExpandProperty Principal` 确认 `LogonType=Interactive`；导出的任务 XML 会显示底层值 `InteractiveToken`。
 
 ### 3.5 换群 / 换 QQ 号
 改 `D:\code\csbaoyan\.env`：

@@ -1,88 +1,141 @@
-# 保研日报 · CS Baoyan Daily 📰
+<div align="center">
 
-> 基于 AI 的 CS 保研群每日信息提炼。**不封号、全自动、零手动导出。**
+# CS 保研日报
 
-🌐 **在线示例**：<https://csbaoyan.cn>
+**把一天的 CS 保研群聊，整理成可检索、可核验、可发布的结构化日报。**
 
----
+[![Website](https://img.shields.io/badge/在线日报-csbaoyan.cn-15594d?style=flat-square)](https://csbaoyan.cn)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-142e76?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
+[![License](https://img.shields.io/badge/License-MIT-d93628?style=flat-square)](LICENSE)
 
-## 这是什么
+[在线阅读](https://csbaoyan.cn) · [部署与运维](docs/MAINTENANCE.md) · [技术改进](docs/IMPROVEMENTS.md) · [数据源原理](docs/optimize-export.md)
 
-把一个 CS 保研 QQ 群里每天海量、杂乱的聊天，自动提炼成一份结构化日报（招生信息、夏令营/预推免、导师联系、面试经验、风险提示等），方便没空爬楼的保研人快速跟进。
+</div>
 
-每日定时运行：**解密本地 QQ 聊天数据库 → 脱敏 → AI 分块提炼 → 汇总成日报 → 发布到网站**。全程无需手动导出聊天记录。
+![CS 保研日报封面与内容卡](docs/assets/readme-preview.jpg)
 
-## 我们解决了什么痛点（最重要的一件事）
+## 为什么做这个项目
 
-本项目是 [jielosc/csbaoyan-chat-daily](https://github.com/jielosc/csbaoyan-chat-daily) 的**改进分支**。原项目已于 2026-05 停更，停更原因（见 [原项目说明](docs/pause-update.md)）是两个叠加的痛点：
+保研群里真正有价值的信息通常散落在数百条聊天中：报名节点、院校变化、导师回复、面试经验，以及尚未核实的传言。爬楼耗时，简单摘要又容易丢失条件和风险提示。
 
-| 痛点 | 原项目 | 本项目 |
-|------|--------|--------|
-| **封号（致命）** | 用 `qq-chat-exporter`（底层 NapCat）**登录第二个 QQ 会话**拉消息 → 腾讯风控 → 强制下线/封号 | 改为**读本地 NTQQ 数据库**，不创建任何第二会话、不发任何网络请求 → **零封号风险** |
-| **每天手动导出（麻烦）** | 每天手动跑导出工具，耗时且随时可能触发封号 | 一台常开 Windows 机器（QQ 保持登录）**定时任务全自动**，每日 06:30 自动出报 |
+CS 保研日报把这条链路做成了可维护的自动化系统：从本人已登录的 NTQQ 本地数据库读取消息，匿名化并分块提炼，生成带来源边界的日报，再发布到网站并导出小红书人工审阅素材。
 
-> 简言之：原项目「为了拿数据去登录第二个 QQ」会被封；本项目「只读自己已登录 QQ 的本地数据库」，纯本地文件操作，从根上绕开了风控。
+> 日报用于发现线索和整理行动项，不代替院校官方通知。所有关键时间、名额与考核安排都应回到官方渠道复核。
 
-## 相比原项目的改进
+## 你会得到什么
 
-| 维度 | 原项目 | 本项目 |
-|------|--------|--------|
-| 数据来源 | NapCat 协议拉取（封号） | 本地 SQLCipher 库直读（[qq_dump_db](https://github.com/NapNeko/qq_dump_db) 解密 + 自研字段抽取） |
-| 封号风险 | 中-高 | **极低**（无第二会话） |
-| 日常操作 | 每天手动导出 | 计划任务全自动，零手动 |
-| 部署形态 | 单机 + GitHub Pages | **三机协同**：数据源（Windows）+ 服务器托管（Linux）+ Cloudflare 隧道 |
-| 数据库健壮性 | — | 防御式读取（自动跳过解密库偶发的 cell 损坏页） |
-| NTQQ 字段处理 | — | 基于 [QQBackup 字段研究](https://github.com/QQBackup/qq-win-db-key/issues/83) 的 schema 自适应（跨版本字段号校准 + `inspect` 体检模式） |
-| 网站访问 | 仅 GitHub Pages | 自有域名 + Cloudflare（大陆免备案） |
+| 能力 | 结果 |
+| --- | --- |
+| 本地 NTQQ 数据源 | 不创建第二个 QQ 登录会话，减少协议机器人带来的风控暴露 |
+| 自动提炼 | 对长聊天分块处理，保留招生节点、经验观点和风险待核实项 |
+| 质量检查 | 支持发布前验证、G-Eval 与事实核查流程，失败时停止发布旧数据 |
+| 多端输出 | 同时生成网站日报、结构化 JSON，以及供管理员人工发布的小红书素材 |
+| 确定性视觉 | 1080×1440 封面、内容卡与收尾卡由 SVG 渲染，文字可测量、可分页、可复现 |
+| 可运维部署 | Windows 负责本地取数，Linux 负责生成与托管，链路可独立诊断和补跑 |
 
-## 架构
+## 工作方式
 
-```
-┌─────────────────────────────┐        ┌──────────────────────────────┐
-│  数据源：Windows 台式机       │        │  托管：Linux 服务器           │
-│  （QQ 保持登录，家宽 IP）     │        │  （24/7）                     │
-│                              │  scp   │                              │
-│  qq_dump_db 解密本地库        │ ─────▶ │  静态站 pages/ (端口 3002)     │
-│  → ingest 抽取消息            │  日报  │        │                      │
-│  → DeepSeek 生成日报          │  上传  │        ▼                      │
-│  （Windows 计划任务每日06:30）│        │  Cloudflare 隧道 → csbaoyan.cn │
-└─────────────────────────────┘        └──────────────────────────────┘
+```mermaid
+flowchart LR
+    A[已登录的 NTQQ] --> B[本地数据库解密与只读抽取]
+    B --> C[按日期和群组生成 QCE JSON]
+    C -->|SSH 原子交接| D[Linux 生成服务]
+    D --> E[匿名化与分块提炼]
+    E --> F[DeepSeek 日报生成]
+    F --> G[验证 / 事实核查]
+    G --> H[csbaoyan.cn]
+    G --> I[小红书人工审阅素材]
 ```
 
-下游的脱敏、分块、AI 汇总、发布逻辑**沿用原项目**（generate / verify / publish / broadcast），本项目只在「数据来源」这一步做了替换与增强，对下游零侵入。
+这套架构把“必须在 Windows 上读取 NTQQ”的部分限制在边缘机器；服务器只接收当日交接文件。若输入缺失、过小、日期错误或生成失败，流水线会停止，不会把旧日报伪装成新日报。
 
-## 快速上手
+## 与原项目的区别
 
-详细文档：
-- **[docs/MAINTENANCE.md](docs/MAINTENANCE.md)** — 三机部署与运维（最详细）
-- **[docs/IMPROVEMENTS.md](docs/IMPROVEMENTS.md)** — 技术改进与设计原理（为什么这么改）
-- **[docs/optimize-export.md](docs/optimize-export.md)** — 本地库直读（路线 B）原理与校准
-- **[docs/deploy-guide.md](docs/deploy-guide.md)** — 原项目部署指南（AI 出报部分）
-- **[docs/pause-update.md](docs/pause-update.md)** — 原项目停更说明（我们要解决的痛点）
+本项目基于 [jielosc/csbaoyan-chat-daily](https://github.com/jielosc/csbaoyan-chat-daily) 继续开发，保留其脱敏、分块、AI 汇总和静态站流程，重点解决数据来源与长期运行问题。
 
-最小流程：
-1. Windows 机器上装 NTQQ 桌面端并登录目标群
-2. `git clone https://github.com/<your-name>/csbaoyan-ribao.git` + [qq_dump_db](https://github.com/NapNeko/qq_dump_db)
-3. `pip install -r requirements.txt`，配置 `.env`（见 `.env.example`）
-4. 用 `ingest --inspect` 一次性校准字段（见 optimize-export.md）
-5. 跑 `ingest` → `pipeline` 生成日报；挂计划任务实现全自动
+| 维度 | 原始方案 | 本项目 |
+| --- | --- | --- |
+| 消息获取 | 通过协议框架建立额外会话 | 从本人已登录的 NTQQ 本地数据库读取 |
+| 日常操作 | 依赖手动导出 | Windows 计划任务自动取数与交接 |
+| 异常策略 | 依赖人工发现 | 新鲜度、消息量、时间覆盖与产物完整性检查 |
+| 部署边界 | 单机为主 | Windows 数据源与 Linux 生成/托管解耦 |
+| 内容出口 | 网站日报 | 网站日报 + 结构化导出 + 小红书人工发布素材 |
+
+## 快速开始
+
+### 1. 安装
+
+```powershell
+git clone https://github.com/cookiesheep/csbaoyan-ribao.git
+cd csbaoyan-ribao
+python -m venv .venv
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+Copy-Item .env.example .env
+$env:PYTHONPATH = "src"
+```
+
+在 `.env` 中配置本地数据库路径、目标群标识和 OpenAI 兼容模型服务。不要提交 API Key、解密后的聊天数据库或原始群聊导出。
+
+### 2. 校准 NTQQ 数据结构
+
+NTQQ 版本变化可能调整字段编号。首次运行先使用体检模式查看表结构和样本解码结果：
+
+```powershell
+.venv\Scripts\python.exe -m csbaoyan_daily.cli ingest --inspect --db-path <解密后的 nt_msg.db>
+```
+
+### 3. 导出并生成日报
+
+```powershell
+.venv\Scripts\python.exe -m csbaoyan_daily.cli ingest --date 2026-09-17
+.venv\Scripts\python.exe -m csbaoyan_daily.cli pipeline --date 2026-09-17 --skip-push
+```
+
+生产环境的定时任务、SSH 交接、systemd 服务、Cloudflare 隧道和补跑流程见 [维护手册](docs/MAINTENANCE.md)。
+
+## 设计原则
+
+- **先保证来源边界。** 群聊推测必须标为待核实，不能改写成院校事实。
+- **先保证数据新鲜。** 当日输入不完整时宁可停止，也不静默复用旧数据。
+- **先保证隐私。** 原始群聊、解密库、密钥与个人联系方式不进入公开仓库和网页。
+- **发布保留人工关口。** 系统生成小红书素材包，管理员审阅后手工发布，不接管平台账号。
+- **视觉可以大胆，排版必须保守。** 正文按语义边界分页，不缩成难读的小字，也不裁掉溢出内容。
+
+## 文档
+
+- [部署与日常运维](docs/MAINTENANCE.md)：生产拓扑、定时任务、补跑与分层排障
+- [技术改进说明](docs/IMPROVEMENTS.md)：本地取数、字段自适应和防御式读取
+- [NTQQ 数据源原理](docs/optimize-export.md)：数据库解析与校准方法
+- [原项目部署指南](docs/deploy-guide.md)：日报生成流程的基础配置
+- [原项目停更背景](docs/pause-update.md)：为什么需要替换消息获取方式
+
+## 安全与限制
+
+- 本地数据库解密涉及平台服务条款边界，仅应用于你本人有权访问的数据，并遵守相关法律、群规与平台规则。
+- 本地读取避免了额外协议登录会话，但任何方案都不应承诺“零风险”或“绝不封号”。
+- 日报由 AI 辅助生成，可能遗漏上下文或产生错误归纳；生产流程必须保留验证与人工复核。
+- 小红书素材不包含二维码、私人联系方式或自动发布能力。
+
+## 路线图
+
+- [ ] 强化跨版本 NTQQ 字段校准与回归样本
+- [ ] 为数据缺口、延迟和异常消息量增加更直观的监控
+- [ ] 扩充日报质量评估与可追溯引用
+- [ ] 完善小红书十套视觉模板的自动轮换与排版 QA
+- [ ] 把生产部署整理成可复用的最小化安装流程
 
 ## 致谢
 
-本项目站在前人肩上，**核心 AI 总结流程来自原项目**：
+- [jielosc/csbaoyan-chat-daily](https://github.com/jielosc/csbaoyan-chat-daily)：原始日报生成、脱敏、发布与前端流程
+- [CS-BAOYAN](https://github.com/CS-BAOYAN)：计算机保研社区生态
+- [NapNeko/qq_dump_db](https://github.com/NapNeko/qq_dump_db)：NTQQ 本地数据库解密工具
+- [QQBackup/qq-win-db-key](https://github.com/QQBackup/qq-win-db-key)：NTQQ 数据库字段研究
+- [blackboxprotobuf](https://github.com/nccgroup/blackboxprotobuf)：protobuf 盲解析
 
-- **[jielosc/csbaoyan-chat-daily](https://github.com/jielosc/csbaoyan-chat-daily)** —— 原作者设计了完整的「脱敏→分块→AI 日报→发布」流程与前端页面，本项目直接沿用并在此基础上做数据源改造。🙏
-- **[CS-BAOYAN 社区](https://github.com/CS-BAOYAN)** —— 「绿群」的来源。
-- **[NapNeko/qq_dump_db](https://github.com/NapNeko/qq_dump_db)** —— 安全解密本地 NTQQ 数据库。
-- **[QQBackup/qq-win-db-key](https://github.com/QQBackup/qq-win-db-key)** —— NTQQ 数据库字段逆向研究（[issue #83](https://github.com/QQBackup/qq-win-db-key/issues/83)），字段抽取的基础。
-- **[blackboxprotobuf](https://github.com/nccgroup/blackboxprotobuf)** —— protobuf 盲解析。
+## 参与贡献
 
-## 免责声明
-
-- 日报由 AI 总结生成，可能不完全准确，请以官方信息为准。
-- 项目对聊天内容做匿名化处理以降低身份暴露风险，但少数语境下仍可能被上下文识别。
-- 本地数据库解密属腾讯 ToS 灰色地带；仅用于获取**你本人所在群**的消息、不外传，实际封号风险极低，但合规风险非零。请遵守相关法律法规，自负责任。
+欢迎提交 Issue 或 Pull Request，尤其是 NTQQ 新版本兼容、日报质量评估、隐私保护和部署可维护性方面的改进。如果这个项目对你有帮助，可以点一个 Star，让更多需要减少群聊信息负担的人找到它。
 
 ## License
 
-MIT（与原项目一致）。
+[MIT](LICENSE)
